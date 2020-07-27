@@ -15,25 +15,29 @@ source('GetReady.R')
 # Elevation
 dem0=raster(fr.dem)
 
-# Watershed Boundary
+# =========Watershed Boundary===========================
 wbd0 = readOGR(fsp.wbd)
+wbd0
+if(is.projected(wbd0)){
+  crs.pcs = crs(wbd0)
+}else{
+  tmp = readOGR(crs.fn)
+  crs.pcs = crs(tmp)
+}
+
+wbd0 = spTransform(wbd0, crs.pcs)
 wbd.buf = gBuffer(wbd0, width = dist.buffer)
 wbd.gcs=spTransform(wbd.buf, CRSobj = crs.gcs )
 wbd.dis = gUnaryUnion(wbd0)
-crs.pcs = crs(wbd0)
 
 writeshape(wbd0, file=file.path(dir.predata, 'wbd0'))
 writeshape(wbd.dis, file=file.path(dir.predata, 'wbd.dis'))
+
 writeshape(wbd.gcs, file=file.path(dir.predata, 'wbd.gcs'))
 writeshape(wbd.buf, file=file.path(dir.predata, 'wbd_buf'))
 
-# Stream Network
-stm0 = readOGR(fsp.stm)
 
-tmp = sp.RiverPath(stm0)
-stm0=tmp$sp
-writeshape(stm0, file=file.path(dir.predata, 'stm0'))
-# crop elevation data
+# =========crop elevation data===========================
 if(grepl('proj=longlat', crs(dem0))){
   dem.cp=mask(crop(dem0, wbd.gcs), wbd.gcs)
   # reproject the dem data from GCS to PCS
@@ -47,6 +51,13 @@ if(grepl('proj=longlat', crs(dem0))){
 writeRaster(dem.pcs,filename = file.path(dir.predata, 'dem.tif'), overwrite=TRUE)
 dem.pcs= raster(file.path(dir.predata, 'dem.tif'))
 
+
+# =========Stream Network===========================
+stm0 = readOGR(fsp.stm)
+stm0 = spTransform(stm0, crs.pcs)
+tmp = sp.RiverPath(stm0)
+stm0=tmp$sp
+writeshape(stm0, file=file.path(dir.predata, 'stm0'))
 png.control(fn='Rawdata_Elevation.png', path = dir.png, ratio = 1)
 plot(dem.pcs)
 plot(wbd0, add=T, border=2)

@@ -3,7 +3,7 @@
 # 2. Load the input watershed boundary(WBD) and river shapefiles (RIV).
 # 3. Simplify the WBD and RIV.
 # 4. Extract the value of soil, geology, and land use.
-# 5. Build the input files for PIHM.
+# 5. Build the input files for SHUD.
 # 6. Export the figures of the model input.
 # 7.
 # 8.
@@ -11,21 +11,54 @@ rm(list=ls())
 source('GetReady.R')
 source('Rfunction/SoilGeol.R')
 source('Rfunction/fun.LAIRL.R')
-fin <- shud.filein(prjname, inpath = dir.pihmin, outpath= dir.pihmout)
-# x=list.files(dir.pihmin, pattern = glob2rx(paste0(prjname, '.*.*')), full.names = T)
+fin <- shud.filein(prjname, inpath = dir.modelin, outpath= dir.modelout)
+# x=list.files(dir.modelin, pattern = glob2rx(paste0(prjname, '.*.*')), full.names = T)
 # file.remove(x)
 
 
 wbd=readOGR(file.path(dir.predata, 'wbd.shp'))
+dem=raster(file.path(dir.predata, 'dem.tif'))
+# ==============================================
+AA1=gArea(wbd)
+a.max = min(AA1/NumCells, AreaMax);
+q.min = 33;
+tol.riv = min(sqrt(a.max)/6, 2000)
+tol.wb = min(sqrt(a.max)/2, 2000)
+tol.rivlen = min(sqrt(a.max)/2, 5000)
+bm.para = c(a.max/1e6, tol.riv, tol.wb, tol.rivlen)
+names(bm.para)=c('MaxArea_km2', 'tol.riv', 'tol.wb', 'MaxRivLen')
+print(bm.para)
+ny=length(years)
+nday = 365*ny + round(ny/4) - 1
+# BUFFER
+wbd.buf=gBuffer(wbd, width=dist.buffer)
+dem = raster::crop(dem, wbd.buf)
+
+wb.dis = rgeos::gUnionCascaded(wbd)
+wb.s1 = rgeos::gSimplify(wb.dis, tol=tol.wb, topologyPreserve = T)
+wb.s2 = sp.simplifyLen(wb.s1, tol.rivlen)
+wb.simp = wb.s2
+plot(wb.simp)
+# generate SHUD .mesh 
+tri = shud.triangle(wb=wb.simp,q=q.min, a=a.max*800)
+plot(tri, asp=1, type='n')
+pm=shud.mesh(tri,dem=dem, AqDepth = AqDepth)
+spm = sp.mesh2Shape(pm, crs = crs(wbd))
+writeshape(spm, crs(wbd), file=file.path(fin['inpath'], 'gis', 'domain'))
+print(nrow(spm@data))
+# stop()
+# ==============================================
 riv=readOGR(file.path(dir.predata, 'stm.shp'))
 riv=sp.RiverPath(riv)$sp
 lens=gLength(riv, byid=TRUE)
 summary(lens)
-riv=sp.CutSptialLines(sl=riv, tol=2000)
-plot(riv)
+riv=sp.CutSptialLines(sl=riv, tol=tol.rivlen)
 
-dem=raster(file.path(dir.predata, 'dem.tif'))
 
+png(file = file.path(dir.png, 'data_0.png'), height=11, width=11, res=100, unit='in')
+plot(dem); 
+plot(wbd, add=T, border=2, lwd=2); plot(riv, add=T, lwd=2, col=4)
+dev.off()
 # ======FORCING FILE======================
 # sp.forc=readOGR( cdir['fn.ldas'] )
 sp.forc=readOGR(file.path(dir.predata, 'LDAS.shp'))
@@ -40,8 +73,6 @@ forc.fns=paste0('x', (sp.forc$xcenter*100),
 write.forc(forc.fns, path = dir.forc, startdate = paste0(min(years), '0101'), 
            file=fin['md.forc'],  backup = FALSE)
 
-# ======BUFFER======================
-wbd.buf=gBuffer(wbd, width=dist.buffer)
 
 png.control(fn=paste0('predata_','data', '.png'), path = dir.png, ratio=1)
 plot(dem);grid()
@@ -56,25 +87,12 @@ indata =list(wbd=wbd, riv=riv, dem=dem)
 graphics.off()
 
 
-pngout = file.path(dir.pihmin, 'fig')
-gisout = file.path(dir.pihmin, 'gis')
-dir.create(dir.pihmin, showWarnings = F, recursive = T)
+pngout = file.path(dir.modelin, 'fig')
+gisout = file.path(dir.modelin, 'gis')
+dir.create(dir.modelin, showWarnings = F, recursive = T)
 dir.create(pngout, showWarnings = F, recursive = T)
 dir.create(gisout, showWarnings = F, recursive = T)
 
-AA1=gArea(wbd)
-cdir
-a.max = min(AA1/NumCells, AreaMax);
-q.min = 33;
-tol.riv = min(sqrt(a.max)/6, 2000)
-tol.wb = min(sqrt(a.max)/2, 2000)
-tol.len = min(sqrt(a.max)/2, 5000)
-bm.para = c(a.max/1e6, tol.riv, tol.wb, tol.len)
-names(bm.para)=c('MaxArea_km2', 'tol.riv', 'tol.wb', 'MaxRivLen')
-print(bm.para)
-# AqDepth = 20
-ny=length(years)
-nday = 365*ny + round(ny/4) - 1
 
 # ======LANDUSE======================
 rlc.idx = raster(file.path(dir.predata, 'Landuse_idx.tif'))
@@ -82,21 +100,11 @@ alc = unique(rlc.idx)
 # rlc = raster(file.path(dir.predata, 'Landuse_PCS.tif'))
 
 
-wbbuf = rgeos::gBuffer(wbd, width = dist.buffer)
-dem = raster::crop(dem, wbbuf)
-
-png(file = file.path(pngout, 'data_0.png'), height=11, width=11, res=100, unit='in')
-plot(dem); plot(wbd, add=T, border=2, lwd=2); plot(riv, add=T, lwd=2, col=4)
-dev.off()
 
 riv.s1 = rgeos::gSimplify(riv, tol=tol.riv, topologyPreserve = T)
-# riv.s2 = sp.simplifyLen(riv, tol.len)
+# riv.s2 = sp.simplifyLen(riv, tol.rivlen)
 # plot(riv.s1); plot(riv.s2, add=T, col=3)
 riv.s2=riv.s1
-
-wb.dis = rgeos::gUnionCascaded(wbd)
-wb.s1 = rgeos::gSimplify(wb.dis, tol=tol.wb, topologyPreserve = T)
-wb.s2 = sp.simplifyLen(wb.s1, tol.len)
 
 png(file = file.path(pngout, 'data_1.png'), height=11, width=11, res=100, unit='in')
 plot(dem); plot(wb.s2, add=T, border=2, lwd=2); 
@@ -104,18 +112,9 @@ plot(riv.s2, add=T, lwd=2, col=4)
 dev.off()
 
 
-# shp.riv =raster::crop(riv.simp, wb.simp)
-# shp.wb = raster::intersect( wb.simp, riv.simp)
-wb.simp = wb.s2
 riv.simp = riv.s2
 
-tri = shud.triangle(wb=wb.simp,q=q.min, a=a.max)
-# plot(tri, asp=1)
 
-# generate PIHM .mesh 
-pm=shud.mesh(tri,dem=dem, AqDepth = AqDepth)
-spm = sp.mesh2Shape(pm, crs = crs(riv))
-writeshape(spm, crs(wbd), file=file.path(gisout, 'domain'))
 #plot_sp(spm, 'Zmax')
 #plot(riv.simp, add=T, col=2, lwd=2)
 png.control(fn=paste0('predata','_domain.png'), path = file.path(dir.png), ratio=1)
@@ -135,7 +134,7 @@ pr=shud.river(riv.simp, dem)
 pr@rivertype$Width= pr@rivertype$Width * 100
 pr@rivertype$Depth= pr@rivertype$Depth
   
-# PIHMriver to Shapefile
+# SHUDriver to Shapefile
 # spr = sp.riv2shp(pr)
 spr = riv
 writeshape(spr, crs(wbd), file=file.path(gisout, 'river'))
@@ -162,7 +161,7 @@ plot(spr, add=T, lwd=3)
 dev.off()
 
 # model configuration, parameter
-# undebug(pihmpara)
+# undebug(SHUDpara)
 cfg.para = shud.para(nday = nday)
 cfg.para['INIT_MODE']=3
 # calibration
@@ -178,7 +177,7 @@ ageol=SoilGeol(spm=spm, rdsfile = file.path(dir.predata, 'Soil_sl7.RDS')  )
 para.soil = PTF.soil(asoil)
 para.geol = PTF.geol(ageol)
 plot(ageol[, 3], para.geol[, 2], log='x')
-stop()
+# stop()
 # para.soil = PTF.soil()
 # para.geol = PTF.geol()
 
@@ -196,7 +195,7 @@ write.tsd(backup = FALSE, lr$RL, file = fin['md.rl'])
 mf = MeltFactor(years = years)
 write.tsd(backup = FALSE, mf, file=fin['md.mf'])
 
-# write PIHM input files.
+# write SHUD input files.
 write.mesh(backup = FALSE,  pm, file = fin['md.mesh'])
 write.riv(backup = FALSE, pr, file=fin['md.riv'])
 write.ic(backup = FALSE, pic, file=fin['md.ic'])
@@ -213,8 +212,3 @@ print(nrow(pm@mesh))
 print(nrow(pr@river))
 
 # ModelInfo()
-
-# p1='/Users/leleshu/Dropbox/workspace/Xcode/PIHM++/Build/Products/Debug/pihm++'
-# p2=file.path(dir.out, 'pihm++')
-# file.copy(from=p1, to=p2, overwrite = TRUE)
-

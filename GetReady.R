@@ -17,9 +17,12 @@
 args = commandArgs(trailingOnly=TRUE)
 if (length(args)==0) {
   fn.prj='project.txt'
-  fn.prj='project/Ningxia.txt'
-  fn.prj='project/California.txt'
-  fn.prj='project/Houston.txt'
+  fn.prj='NoSync/project/Ningxia.txt'
+  fn.prj='NoSync/project/Guandong.txt'
+  fn.prj='NoSync/project/Lanzhou.txt'
+  fn.prj='/Users/leleshu/Dropbox/Project/China/NHS/NHS.txt'
+  # fn.prj='NoSync/project/California.txt'
+  # fn.prj='NoSync/project/Houston.txt'
 }else{
   print(args)
   fn.prj = args[1]
@@ -34,43 +37,53 @@ if(file.exists(fn.prj)){
   stop('File missing: ', fn.prj)
 }
 
-# dir.rawdata=cdir$dir.rawdata
-dir.soil = cdir$dir.soil
-dir.ldas = cdir$dir.ldas
-dir.out = cdir$dir.out
-dout.forc = cdir$dout.forc
-
-prjname=cdir$prjname
-years=as.numeric(cdir$startyear): as.numeric(cdir$endyear)
-
-fsp.wbd = cdir$fsp.wbd
-fsp.stm = cdir$fsp.stm
-
-fr.dem=cdir$fr.dem
-fr.landuse = cdir$fr.landuse
-AreaMax = as.numeric(cdir$MaxArea)
-if(is.null(AreaMax) | is.na(AreaMax)){
-  AreaMax = 1e6 * 10;
-}else{
-  AreaMax = AreaMax * 1e6
+getVAL <- function(x, valname, defVal = NULL){
+  y = x[[valname]]
+  if(is.null(y)) {
+    if(is.null(defVal)){
+      message('Error: value ', valname, ' is missing')
+      stop('GetVal')
+    }else{
+      r = defVal
+    }
+  }else{
+    r = y
+  }
+  return(r)
 }
-NumCells = as.numeric(cdir$NumCells)
-if(is.null(NumCells) | is.na(NumCells)){
-  NumCells = 1000;
-}
-AqDepth = as.numeric(cdir$AqDepth)
-if(is.null(AqDepth) | is.na(AqDepth)){
-  AqDepth = 10;
-}
+
+
+
+# dir.rawdata=getVAL(cdir, 'dir.rawdata')
+dir.soil = getVAL(cdir, 'dir.soil')
+dir.ldas = getVAL(cdir, 'dir.ldas')
+dir.out = getVAL(cdir, 'dir.out')
+# dout.forc = getVAL(cdir, 'dout.forc')
+
+prjname=getVAL(cdir, 'prjname')
+years=as.numeric(getVAL(cdir, 'startyear')): as.numeric(getVAL(cdir, 'endyear'))
+
+fsp.wbd = getVAL(cdir, 'fsp.wbd')
+fsp.stm = getVAL(cdir, 'fsp.stm')
+
+fr.dem=getVAL(cdir, 'fr.dem')
+fr.landuse = getVAL(cdir, 'fr.landuse')
+AreaMax = as.numeric(getVAL(cdir, 'AreaMax', 1e6))
+NumCells = as.numeric(getVAL(cdir, 'NumCells', 1000))
+AqDepth = as.numeric(getVAL(cdir, 'AqDepth', 10))
+crs.fn <- cdir$crs
+  
 # years=2017:2018
 dir.png =file.path(dir.out, 'Image')
 dir.predata = file.path(dir.out, 'DataPre' )
-dir.pihmin <- file.path(dir.out, 'input', prjname)
-dir.pihmout <- file.path(dir.out, 'output', paste0(prjname, '.out') )
-# dir.forc <- file.path(dir.out, 'forcing')
-dir.forc=cdir$dout.forc
+dir.modelin <- file.path(dir.out, 'input', prjname)
+dir.modelout <- file.path(dir.out, 'output', paste0(prjname, '.out') )
 
-tmp=lapply(list(dir.out,dout.forc, dir.png, dir.predata, dir.pihmin, dir.pihmout, dir.forc), dir.create, showWarnings=F, recursive=T)
+# dir.forc <- file.path(dir.out, 'forcing')
+# dir.forc=getVAL(cdir, 'dout.forc')
+
+tmp=lapply(list(dir.out, #dout.forc,dir.forc
+                dir.png, dir.predata, dir.modelin, dir.modelout), dir.create, showWarnings=F, recursive=T)
 
 library(raster)
 library(sp)
@@ -94,5 +107,5 @@ res=0.125 # 0.1 deg resolution in NLDAS
 # res=0.25 # 0.1 deg resolution in GLDAS
 LDAS.ATT = data.frame(0.125, 0.1, 0.25); 
 names(LDAS.ATT) = c('NLDAS', 'FLDAS', 'GLDAS')
-ldas.name = cdir$LDAS.name
+ldas.name = getVAL(cdir, 'LDAS.name')
 res=  LDAS.ATT[ldas.name]

@@ -8,7 +8,7 @@
 # 7.
 # 8.
 source('GetReady.R')
-pp = PIHM(prjname = prjname, inpath = dir.pihmin, outpath = dir.pihmout)
+pp = shud.env(prjname = prjname, inpath = dir.modelin, outpath = dir.modelout)
 ia=getArea()
 res=round(sqrt(mean(ia)), -2)
 rmask=PIHM.mask(cellsize = res)

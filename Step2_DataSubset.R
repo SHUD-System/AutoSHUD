@@ -12,7 +12,7 @@
 # wbd=wbd0[id,]
 rm(list=ls())
 source('GetReady.R')
-wbd = readOGR(fsp.wbd)
+wbd = readOGR(file.path(dir.predata, 'wbd0.shp'))
 writeshape(wbd, file = file.path(dir.predata, 'wbd'))
 
 wbd.dis = gUnaryUnion(wbd) # dissolve the wbd.
@@ -23,7 +23,7 @@ writeshape(wbd.buf, file = file.path(dir.predata, 'wbd_buf'))
 wbd.gcs=spTransform(wbd.buf, CRSobj = crs.gcs)
 writeshape(wbd.gcs, file = file.path(dir.predata, 'wbd_gcs'))
 
-stm0 = readOGR(fsp.stm)
+stm0 = readOGR(file.path(dir.predata, 'stm0.shp'))
 writeshape(stm0, file = file.path(dir.predata, 'stm'))
 
 dem0=raster(file.path(dir.predata, 'dem.tif'))
@@ -45,10 +45,10 @@ title('DEM-WBD-STM')
 dev.off()
 # stop()
 # =======Soil=============
-# source('Step2.1_Soil.R')
+source('Step2.1_Soil.R')
 # 
 # # =======Land Cover=============
-# source('Step2.2_Landcover.R')
+source('Step2.2_Landcover.R')
 # 
 # # =======Forcing=============
 # source('Step2.3_Forcing.R')
