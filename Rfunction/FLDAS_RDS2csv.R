@@ -17,6 +17,7 @@ unitConvert <- function(x){
               abs(winds) * 86400  , #m/s to m/day
               solar *24 *3600   )
   colnames(ret) = forcnames
+  ret = round(ret, 4)
   ret
 }
 
@@ -56,7 +57,7 @@ sitename
 fns=paste0(sitename, '.csv')
 for(i in 1:nx){
   fn=fns[i]
-  write.tsd(xl[[i]], file.path(dir.forc, fn), backup = FALSE)
+  write.tsd(xl[[i]], file.path(dir.forc, fn))
   if(i==1){
     xmean = xl[[i]]
   }else{

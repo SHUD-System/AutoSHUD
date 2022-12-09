@@ -12,55 +12,88 @@
 # 2. Te wbd and stm data must be ready before this step.
 rm(list=ls())
 source('GetReady.R')
-# Elevation
-dem0=raster(fr.dem)
+prefix ='S1'
+# ================= Boundary =================
+wbd0 = readOGR(xfg$fsp.wbd)  # Read data
+wbd0 = gBuffer(wbd0, width=0) # Remove error from irregular polygon.
+# ---- disolve ----
+wbd.dis = removeholes(gUnaryUnion(wbd0))
 
-# =========Watershed Boundary===========================
-wbd0 = readOGR(fsp.wbd)
-wbd0
-if(is.projected(wbd0)){
-  crs.pcs = crs(wbd0)
-}else{
-  tmp = readOGR(crs.fn)
-  crs.pcs = crs(tmp)
-}
+# wbd in pcs
+wb.p = spTransform(wbd0, xfg$crs.pcs) 
+writeshape(wb.p, pd.pcs$wbd)
 
-wbd0 = spTransform(wbd0, crs.pcs)
-wbd.buf = gBuffer(wbd0, width = dist.buffer)
-wbd.gcs=spTransform(wbd.buf, CRSobj = crs.gcs )
-wbd.dis = gUnaryUnion(wbd0)
+# buffer of wbd in pcs
+buf.p = gBuffer(wb.p, width = xfg$para$DistBuffer) 
+writeshape(buf.p, pd.pcs$wbd.buf)
 
-writeshape(wbd0, file=file.path(dir.predata, 'wbd0'))
-writeshape(wbd.dis, file=file.path(dir.predata, 'wbd.dis'))
+buf.g = spTransform(buf.p, xfg$crs.gcs)
+writeshape(buf.g, pd.gcs$wbd.buf)
 
-writeshape(wbd.gcs, file=file.path(dir.predata, 'wbd.gcs'))
-writeshape(wbd.buf, file=file.path(dir.predata, 'wbd_buf'))
+wb.g=spTransform(wb.p, CRSobj = xfg$crs.gcs )
+writeshape(wb.g, pd.gcs$wbd)
 
 
-# =========crop elevation data===========================
-if(grepl('proj=longlat', crs(dem0))){
-  dem.cp=mask(crop(dem0, wbd.gcs), wbd.gcs)
-  # reproject the dem data from GCS to PCS
-  dem.pcs=projectRaster(from=dem.cp, crs=crs(wbd0))
-}else{
-  dem.cp=mask(crop(dem0, wbd.buf), wbd.buf)
-  dem.pcs=dem.cp
-}
-
-# # save the data
-writeRaster(dem.pcs,filename = file.path(dir.predata, 'dem.tif'), overwrite=TRUE)
-dem.pcs= raster(file.path(dir.predata, 'dem.tif'))
-
+# ================= DEM =================
+dem0=raster(xfg$fr.dem)
+# -------CROP DEM -----------------
+# Crop the dem AND conver the dem to PCS.
+fun.gdalwarp(f1=xfg$fr.dem, f2=pd.pcs$dem, t_srs = xfg$crs.pcs, s_srs = crs(dem0), 
+             opt = paste0('-cutline ', pd.pcs$wbd.buf) )
+# Crop the dem, output is in GCS
+fun.gdalwarp(f1=xfg$fr.dem, f2=pd.gcs$dem, t_srs = xfg$crs.gcs, s_srs = crs(dem0), 
+             opt = paste0('-cutline ', pd.pcs$wbd.buf) )
 
 # =========Stream Network===========================
-stm0 = readOGR(fsp.stm)
-stm0 = spTransform(stm0, crs.pcs)
-tmp = sp.RiverPath(stm0)
-stm0=tmp$sp
-writeshape(stm0, file=file.path(dir.predata, 'stm0'))
-png.control(fn='Rawdata_Elevation.png', path = dir.png, ratio = 1)
-plot(dem.pcs)
-plot(wbd0, add=T, border=2)
-plot(stm0, add=T, col=4)
+stm0 = readOGR(xfg$fsp.stm)  # data 0: raw data
+stm1 = spTransform(stm0, xfg$crs.pcs)  # data 1: PCS
+fun.simplifyRiver <- function(rmDUP=TRUE){
+  riv.xy = extractCoords(stm1)
+  npoint = nrow(riv.xy)
+  mlen = gLength(stm1) / npoint
+  r.dem = raster(pd.pcs$dem)
+  dx = mean(res(r.dem))
+  if( mlen < dx){
+    stm1 = gSimplify(stm1, tol = dx)
+  }
+  if(rmDUP){
+    res = rmDuplicatedLines(stm1)
+  }else{
+    res = stm1
+  }
+  res
+}
+# debug(sp.RiverDown)
+if(xfg$para$flowpath){
+  stm1 = fun.simplifyRiver(rmDUP = FALSE)
+  stm.p= sp.RiverPath(stm1, tol.simplify = 30)$sp  # clean data with flowpath.
+  stm.p = stm1
+}else{
+  stm.p = stm1
+}
+
+writeshape(stm.p, file=pd.pcs$stm)
+
+#' ==========================================
+if(LAKEON){
+  spl0 = readOGR(xfg$fsp.lake)  # data 0: raw data
+  spl1 = removeholes(spl0)
+  spl.gcs = spTransform(spl1, CRSobj = xfg$crs.gcs)
+  writeshape(spl.gcs, pd.gcs$lake)
+  
+  spl.pcs = spTransform(spl.gcs, CRSobj = xfg$crs.pcs)  # data 1: PCS
+  writeshape(spl.pcs, pd.pcs$lake)
+}
+
+#' ==== PLOT FIGURE ================
+dem.p = raster(pd.pcs$dem)
+png.control(fn=paste0(prefix, '_Rawdata_Elevation.png'), path = xfg$dir$fig, ratio = 1)
+plot(dem.p)
+plot(wb.p, add=T, border=2)
+if(LAKEON){
+  plot(spl.pcs, add=TRUE, border='darkblue', lwd=1.5)
+}
+plot(stm.p, add=T, col=4)
 dev.off()
+
 

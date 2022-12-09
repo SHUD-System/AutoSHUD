@@ -21,7 +21,7 @@ go.calib <- function(){
   cfg.calib['SOIL_KMACSATV']=1
   cfg.calib['RIV_KH']=1
   cfg.calib$LC_IMPAF=0.5
-  write.config(cfg.calib, file=PIHM.filein()['md.calib'], backup = F )
+  write.config(cfg.calib, file=PIHM.filein()['md.calib'] )
   cfg.calib
 }
 go.para<- function(dt.model =1){
@@ -43,7 +43,7 @@ go.para<- function(dt.model =1){
   cfg.para['MAX_SOLVER_STEP']=dt.model
   cfg.para['INIT_MODE']=3
   print(cfg.para)
-  write.config(cfg.para, file=PIHM.filein()['md.para'], backup = F )
+  write.config(cfg.para, file=PIHM.filein()['md.para'] )
   cfg.para
 }
 go.init<-function(){
@@ -51,7 +51,7 @@ go.init<-function(){
   x$minit[, 5] =  1
   x$minit[, 6] = 7
   x$rinit[, 2] = 1
-  writeinit(x, file = PIHM.filein()['md.ic'], backup=FALSE)
+  writeinit(x, file = PIHM.filein()['md.ic'])
   x
 }
 go.geol <- function(KSAT){
@@ -61,7 +61,7 @@ go.geol <- function(KSAT){
   x[, 4] = 0.30 # theta_s Shen2010
   x[, 5] = 0.01 # theta_r Shen2010
   # x[, 6:8] = 1 #vAreaF.m2_m2. macKsatH.m_d. Dmac.m.
-  write.df(x,  PIHM.filein()['md.geol'], backup = F)
+  write.df(x,  PIHM.filein()['md.geol'])
   x
 }
 go.soil <- function(KSAT){
@@ -72,13 +72,13 @@ go.soil <- function(KSAT){
   x[, 6] = 3.3 # alpha Shen2010
   x[, 7] = 4.1 # beta Shen2010
   # x[, 8:9] = 0 # hAreaF.m2_m2, macKsatV.m_d
-  write.df(x,  PIHM.filein()['md.soil'], backup = F)
+  write.df(x,  PIHM.filein()['md.soil'])
   x
 }
 go.mesh <- function(){
   pm=readmesh()
   pm@point$AqDepth=10
-  writemesh(pm, PIHM.filein()['md.mesh'], backup = F)
+  writemesh(pm, PIHM.filein()['md.mesh'])
   pm
 }
 

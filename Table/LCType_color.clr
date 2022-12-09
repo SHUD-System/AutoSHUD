@@ -1,0 +1,18 @@
+0	186	248	254	255	 Water
+1	20	103	12	256	 Evergreen Needle leaf Forest
+2	85	168	89	257	 Evergreen Broadleaf Forest
+3	127	208	31	258	 Deciduous Needle leaf Forest
+4	115	234	105	259	 Deciduous Broadleaf Forest
+5	79	205	136	260	 Mixed Forests
+6	211	115	121	261	 Closed Shrublands
+7	250	236	165	262	 Open Shrublands
+8	184	234	142	263	 Woody Savannas
+9	248	234	44	264	 Savannas
+10	245	194	108	265	 Grasslands
+11	66	135	206	266	 Permanent Wetland
+12	251	255	45	267	 Croplands
+13	240	0	26	268	 Urban and Built-Up
+14	142	144	23	269	 Cropland/Natural Vegetation Mosaic
+15	251	220	212	270	 Snow and Ice
+16	189	189	189	271	 Barren or Sparsely Vegetated
+

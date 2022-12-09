@@ -8,11 +8,13 @@
 # 7.
 # 8.
 source('GetReady.R')
-pp = shud.env(prjname = prjname, inpath = dir.modelin, outpath = dir.modelout)
-ia=getArea()
+
+pp = shud.env(prjname = xfg$prjname, inpath = xfg$dir$modelin, outpath = xfg$dir$modelout)
+ia=getArea(); AA = sum(ia)
 res=round(sqrt(mean(ia)), -2)
-rmask=PIHM.mask(cellsize = res)
+rmask=shud.mask(cellsize = res)
 spr=readriv.sp()
+oid=getOutlets()
 vns= c("eleysurf","eleyunsat","eleygw",
        "elevprcp","elevetp",
        "elevinfil","elevrech",
@@ -20,8 +22,8 @@ vns= c("eleysurf","eleyunsat","eleygw",
        "elevetic", "elevettr", "elevetev",'elevetp',
        "rivqdown","rivqsub", "rivqsurf","rivystage")
 # undebug(BasicPlot)
-xl=BasicPlot(varname = vns, imap = T, sp.riv = spr)
-
+xl=loaddata(varname = vns)
+stop()
 png.control('WaterBalance.png', path=pp$anapath)
 wb=wb.all(xl=xl, apply.weekly, plot = T)
 dev.off()

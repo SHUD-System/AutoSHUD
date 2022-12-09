@@ -6,3 +6,10 @@ NoSync
 test.R
 Untitled.R
 project.txt
+.DS_Store
+*.zip
+Shiny.R
+back*.R
+bak*.R
+*.R.bak
+*.swp

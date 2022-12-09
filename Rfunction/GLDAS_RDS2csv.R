@@ -1,28 +1,8 @@
 # read the RDS above, to save as .csv file.
 
-unitConvert <- function(x, diff_seconds){
-  t0=273.15
-  prcp = x[,'Rainf_f_tavg']
-  temp = x[,'Tair_f_inst']
-  SH = x[,'Qair_f_inst']
-  winds = x[,'Wind_f_inst']
-  solar= x[,'Swnet_tavg']
-  press = x[,'Psurf_f_inst']
-
-  rh = 0.263*press*SH/exp(17.67 * (temp - t0) /(temp - 29.65) ) # specific hum to relative hum
-  forcnames = c( "Precip", "Temp", "RH", "Wind", "RN" )
-  ret = cbind(prcp * diff_seconds /1000   , #mm/m2/s(FLDAS) to m/day (PIHM)
-              temp - t0   , # C
-              rh/100  ,  # PERCENTAGE
-              abs(winds) * diff_seconds  , #m/s to m/day
-              solar *diff_seconds  )
-  colnames(ret) = forcnames
-  ret
-}
-
-write.tsd.custom <- function (x, file, append = F, quite = F, header = NULL, backup = TRUE) 
+source('Rfunction/LDAS_UnitConvert.R')
+write.tsd.custom <- function (x, file, append = F, quite = F, header = NULL) 
 {
-  filebackup(file, backup = backup)
   mat = as.matrix(rbind(x))
   nr = nrow(x)
   nc = ncol(x)
@@ -44,7 +24,7 @@ write.tsd.custom <- function (x, file, append = F, quite = F, header = NULL, bac
         sep = "\t")
 }
 
-fns = file.path(dir.predata, paste0(prjname,'-', years, '.RDS'))
+fns = file.path(xfg$dir$predata, paste0(xfg$prjname,'-', xfg$years, '.RDS'))
 
 cns = c('Rainf_f_tavg', 'Tair_f_inst','Qair_f_inst',
         'Wind_f_inst', 'Swnet_tavg','Lwnet_tavg', 
@@ -67,14 +47,18 @@ nd = dim(dat)
 xl = list()
 
 # TODDO: modify the time to extract correct time
-# time = as.Date(dimnames(dat)[[3]],'%Y%m%d')
-time = as.POSIXct(dimnames(dat)[[3]], format= "%Y%m%d%H")
+time.tag = dimnames(dat)[[3]]
+idx = which(!grepl(' ', time.tag))
+time.tag[idx] = paste0(time.tag[idx], '00:00:00')
+time = lubridate::ymd_hms(time.tag)
+# time = as.POSIXct(dimnames(dat)[[3]], format= "%Y%m%d%H")
 diff_seconds = as.numeric(difftime(time[[2]], time[[1]], units="hours")) * 3600
+diff_seconds
 
 for(i in 1:nd[1]){
   message(i,'/', nd[1], '\t', dn[[1]][i] )
   x = t( dat[i,,] )
-  y=unitConvert(x, diff_seconds)
+  y=unitConvert.GLDAS(x, diff_seconds)
   xl[[i]]=as.xts(y, order.by=time)
 }
 nx=length(xl)
@@ -84,13 +68,14 @@ fns=paste0(sitename, '.csv')
 for(i in 1:nx){
   fn=fns[i]
   # write this in correct format
-  write.tsd.custom(xl[[i]], file.path(dout.forc, fn), backup = FALSE)
+  # write.tsd.custom(xl[[i]], file.path(xfg$dir$forc, fn))
+  write.tsd(xl[[i]], file.path(xfg$dir$forc, fn))
   if(i==1){
     xmean = xl[[i]]
   }else{
     xmean = xmean + xl[[i]]
   }
 }
-png.control(fn=paste0('Rawdata','_FLDAS_TS.png'), path = file.path(dir.png), ratio=1)
+png.control(fn=paste0('Rawdata','_FLDAS_TS.png'), path = file.path(xfg$dir$fig), ratio=1)
 plot.zoo(xmean/nx, main='FLDAS')
 dev.off()

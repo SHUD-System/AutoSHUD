@@ -1,6 +1,7 @@
 source('GetReady.R')
-PIHM(prjname = prjname, inpath = dir.pihmin, outpath = dir.pihmout)
-outpath=dir.pihmout
+
+shud.env(prjname = xfg$prjname, inpath = dir.modelin, outpath = dir.modelout)
+outpath=dir.modelout
 # cfg.para=readpara()
 # print(cfg.para)
 # dt.model = 2
@@ -25,7 +26,7 @@ oid=getOutlets(pr)
 pm = readmesh()
 ia=getArea()
 AA=sum(ia)
-seg=readchannel()
+seg=readrivseg()
 cfg.para=readpara()
 dt=as.numeric(cfg.para['DT_QR_DOWN'])
 minfo = c(Ncell = length(ia), Nriv=nrow(pr@river), Nseg =nrow(seg),

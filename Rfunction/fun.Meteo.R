@@ -1,0 +1,4 @@
+
+
+
+# sp.meteoSite=readOGR(fn)
