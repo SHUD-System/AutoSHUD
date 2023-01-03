@@ -47,8 +47,12 @@ plot(wb.simp)
 #' 
 if(LAKEON){
   source('SubScript/Sub3_lake.R')  
+  plotlake <- function(){
+    plot(sp.lake, add=T, border='darkblue', col=rgb(0, 0.7, 0, 0.25))
+  }
 }else{
   sp.lake=NULL
+  plotlake<- function(){}
 }
 
 # generate SHUD .mesh 
@@ -93,11 +97,12 @@ summary(lens)
 spr = sp.CutSptialLines(sl=riv2, tol=tol.rivlen)
 # writeshape(spr, file=file.path(xfg$dir$predata, 'spr'))
 go.png <- function(){
-  png(file = file.path(xfg$dir$fig, 'data_0.png'), height=11, width=11, res=100, unit='in')
-  plot(dem);  plot(wbd, add=T, border=2, lwd=2); plot(riv2, add=T, lwd=2, col=4); grid()
+  png(file = file.path(xfg$dir$fig, 's3_data_0.png'), height=11, width=11, res=100, unit='in')
+  plot(dem);  plot(wbd, add=T, border=2, lwd=2); plot(riv2, add=T, lwd=2, col=4); 
+  plotlake()
+  grid()
   dev.off()
-}; 
-go.png()
+}; go.png()
 # ======FORCING FILE======================
 if( xfg$iforcing < 1 ){
   if( xfg$iforcing < 0 ){
@@ -125,12 +130,13 @@ write.forc(sp.forc@data, path = xfg$dir$forc,
 
 
 go.png <-function(){
-  png.control(fn=paste0('predata_','data', '.png'), path = xfg$dir$fig, ratio=1)
+  png.control(fn=paste0('s3_predata_','data', '.png'), path = xfg$dir$fig, ratio=1)
   plot(dem);grid()
   plot(buf.g, add=T, axes=T, lwd=2)
   plot(wbd, add=T, border=3, lwd=2)
   plot(riv2, add=T, col=2, lwd=2)
   plot(sp.forc, add=T, lwd=0.5, lty=2)
+  plotlake()
   grid()
   title('DEM-WBD-RIV')
   dev.off()
@@ -150,18 +156,20 @@ dir.create(gisout, showWarnings = F, recursive = T)
 
 # ====== RIVER ======================
 go.png <-function(){
-  png(file = file.path(xfg$dir$fig, 'data_1.png'), height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_data_1.png'), height=11, width=11, res=100, unit='in')
   plot(dem); plot(wb.s2, add=T, border=2, lwd=2); 
-  plot(spr, add=T, lwd=2, col=4)
+  plot(spr, add=T, lwd=2, col=4)  
+  plotlake()
   grid()
   dev.off()
 }; go.png()
 
 go.png <-function(){
-  png.control(fn=paste0('predata','_domain.png'), path = file.path(xfg$dir$fig), ratio=1)
+  png.control(fn=paste0('s3_predata','_domain.png'), path = file.path(xfg$dir$fig), ratio=1)
   plot_sp(spm, 'Zmax', axes=TRUE)
   plot(spr, add=T, col=2, lwd=2)
   mtext(side=3, cex=2, paste0('Ncell = ', nCells))
+  plotlake()
   grid()
   dev.off()
 }; go.png()
@@ -218,7 +226,7 @@ pic = shud.ic(ncell = nrow(pm@mesh), nriv = nrow(pr@river), lakestage=lakestage,
 
 # Generate shapefile of mesh domain
 sp.dm = sp.mesh2Shape(pm)
-# png(file = file.path(xfg$dir$fig, 'data_2.png'), height=11, width=11, res=100, unit='in')
+# png(file = file.path(xfg$dir$fig, 's3_data_2.png'), height=11, width=11, res=100, unit='in')
 # zz = sp.dm@data[,'Zsurf']
 # ord=order(zz)
 # col=terrain.colors(length(sp.dm))
@@ -274,7 +282,7 @@ if(xfg$ilanduse == 0.1){
   stop()
 }
 
-png(file = file.path(xfg$dir$fig, 'data_lairl.png'), height=7, width=7, res=300, unit='in')
+png(file = file.path(xfg$dir$fig, 's3_data_lairl.png'), height=7, width=7, res=300, unit='in')
 par(mfrow=c(2,1))
 col=1:length(alc)
 plot(lr$LAI, col=col, main='LAI'); legend('top', paste0(alc), col=col, lwd=1)
