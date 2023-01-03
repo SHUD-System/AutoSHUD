@@ -84,7 +84,7 @@ unitConvert.CMFD <- function(x){
   p_mm.day[p_mm.day  < 1e-4 ] = 0.0  # prcp < 0.1 mm/day, No rain then.
   ret = cbind(prcp*24  , #mm/hr(CMFD) to mm/day (SHUD 2021.12)
               temp - t0   , # C
-              rh/100  ,  # Ratio 0-1
+              max(0, min(1, rh/100)  ),  # Ratio 0-1
               abs(winds)  , #m/s to m/s
               solar   )  # w/m2
   ret = round(ret, 4)
