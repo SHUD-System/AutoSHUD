@@ -10,7 +10,7 @@ read.prj <- function(fn.prj){
       #   message('Error: value ', valname, ' is missing')
       #   stop('GetVal')
       # }else{
-      r = NULL
+      r = defVal
       # }
     }else{
       r = y
@@ -74,9 +74,9 @@ read.prj <- function(fn.prj){
   flowpath = getVAL(xcfg, 'flowpath', TRUE, 0)
   MinAngle = getVAL(xcfg, 'MinAngle', TRUE, 31)
   MAX_SOLVER_STEP = getVAL(xcfg, 'MAX_SOLVER_STEP', TRUE, 2)
-  CRYOSPHERE = getVAL(xcfg, 'CRYOSPHERE', TRUE, 2)
+  CRYOSPHERE = getVAL(xcfg, 'CRYOSPHERE', TRUE, 0)
   STARTDAY = getVAL(xcfg, 'STARTDAY', TRUE, 0)
-  ENDDAY = getVAL(xcfg, 'ENDDAY', TRUE, 365)
+  ENDDAY = getVAL(xcfg, 'ENDDAY', TRUE, rSHUD::days_in_year(years))
   
   crs.fn <- getVAL(xcfg, 'fsp.crs')
   if( !is.null(crs.fn)){
