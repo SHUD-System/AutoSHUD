@@ -335,5 +335,7 @@ hist(sqrt(ia)/1e3, xlab='Length (km)')
 par(mfrow=c(1, 1))
 dev.off()
 # ModelInfo()
-print(nCells)
+message('NCell= ', nCells, '\t Area = ', round(sum(ia))/1e6,
+        '\n\t ia_mean=', mean(ia)/1e6, '\t ia_mean=', sqrt(mean(ia)))
+
 

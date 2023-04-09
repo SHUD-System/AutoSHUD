@@ -87,6 +87,9 @@ if(irun$forcing>0){
     }else if( xfg$iforcing == 0.5 ){  
       # CMFD
       message('USING CMFD FORCING DATA')
+      # source('Rfunction/CMFD_getRDS.R')
+      # source('Rfunction/get_LDAS_RDS.R')
+      # source('Rfunction/LDAS.RDS2CSV.R')
       source('Rfunction/CMFD_NC2RDS.R') # read the orginal fldas data and save to .RDS file.
       source('Rfunction/CMFD_RDS2csv.R') # read the RDS above, to save as .csv file.
     } else if( xfg$iforcing == 0.6 ){  

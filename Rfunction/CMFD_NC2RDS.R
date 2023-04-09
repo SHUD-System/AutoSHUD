@@ -11,8 +11,9 @@ nyr = length(xfg$years)
 fn=list.files(xfg$dir.ldas, 
               pattern = glob2rx(paste0(varnames[1], '*CMFD*.nc') ),
            recursive = TRUE, ignore.case = TRUE, full.names = TRUE)[1]
-
-xp = initalGrids(fn=fn, vn=tolower(varnames[1]), pd.gcs = pd.gcs, pd.pcs = pd.pcs)
+# debug(initalGrids)
+xp = initalGrids(fn=fn, vn=tolower(varnames[1]), dxy=0.1,
+                 pd.gcs = pd.gcs, pd.pcs = pd.pcs)
 id = xp$id
 print(length(id))
 sitenames=xp$sitenames

@@ -1,6 +1,7 @@
 
 
 read.prj <- function(fn.prj){
+  PATH2FD ='/Users/leleshu/volume/data/ForcingData'
   getVAL <- function(x, valname, real=FALSE, defVal = NULL){
     names(x) = toupper(names(x))
     valname = toupper(valname)
@@ -66,6 +67,9 @@ read.prj <- function(fn.prj){
   fsp.lake = getVAL(xcfg, 'fsp.lake')
   
   fr.dem = getVAL(xcfg, 'fr.dem')
+  if(is.null(fr.dem)){
+    
+  }
   fn.landuse = getVAL(xcfg, 'fn.landuse')
   tab.landuse = getVAL(xcfg, 'tab.landuse')
   MaxArea = getVAL(xcfg, 'MaxArea', TRUE, defVal = 1) * 1e6
@@ -117,7 +121,9 @@ read.prj <- function(fn.prj){
                  predata=dir.predata, 
                  modelin=dir.modelin, 
                  modelout=dir.modelout,
-                 forc = dout.forc)
+                 forc = dout.forc,
+                 PATH2FD = PATH2FD
+                 )
   if(isoil < 1){
     dirlist = c(dirlist, soil=dir.soil)
   }
@@ -138,6 +144,9 @@ read.prj <- function(fn.prj){
   # names(LDAS.ATT) = c('NLDAS', 'FLDAS', 'GLDAS')
   # ldas.name = getVAL(xcfg, 'LDAS.name')
   # res=  LDAS.ATT[ldas.name]
+  if(is.null(fr.dem)){
+    fr.dem =  file.path(dirlist$predata, paste0(prjname, '_gdem.tif'))
+  }
   
   cfg = list('prjname' = prjname,
              'years' = years,
@@ -152,7 +161,7 @@ read.prj <- function(fn.prj){
              'iforcing' = iforcing,
              'fsp.forc'=fsp.forc,
              'dout.forctsd' = dout.forc,
-             
+             'tab.forc' = file.path(dir.predata, 'meteoCov.csv'),
              
              'ilanduse' = ilanduse,
              'fn.landuse'=fn.landuse,

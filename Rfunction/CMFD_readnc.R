@@ -71,7 +71,7 @@ readnc.CMFD<-function(ncid, varid=NULL,  ext = NULL){
 
 
 
-initalGrids <- function(fn, vn, pd.gcs, pd.pcs, sp.ldas=NULL){
+initalGrids <- function(fn, vn, pd.gcs, pd.pcs, sp.ldas=NULL, dxy){
   buf.g = readOGR(pd.gcs$wbd.buf)
   ext = extent(buf.g)
   
@@ -82,9 +82,9 @@ initalGrids <- function(fn, vn, pd.gcs, pd.pcs, sp.ldas=NULL){
   nc.all$x = round(nc.all$x, 3);   nc.all$y = round(nc.all$y, 3)
   nc.sub$x = round(nc.sub$x, 3);   nc.sub$y = round(nc.sub$y, 3)
   # undebug(xyz2Raster)
-  r = xyz2Raster(x = nc.all)
+  r = xyz2Raster(x = nc.all, Dxy = dxy)
   # debug(xyz2Raster)
-  r.sub = xyz2Raster(x = nc.sub)
+  r.sub = xyz2Raster(x = nc.sub, Dxy = dxy)
   if(is.null(sp.ldas)){
     sp.ldas = raster2Polygon(rx = r.sub)
     # sp.center = gCentroid(sp.ldas, byid=TRUE)

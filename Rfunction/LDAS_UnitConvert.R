@@ -10,7 +10,7 @@ unitConvert.NLDAS <- function(x, diff_seconds){
   forcnames = c( "Precip_mm.d", "Temp_C", "RH_1", "Wind_m.s", "RN_w.m2" )
   ret = cbind(prcp * 86400 / diff_seconds, # mm/hr(NLDAS) to mm/day (SHUD)
               temp - t0   , # C
-              rh  ,  # Ratio 0-1
+              rh/100  ,  # Ratio 0-1
               abs(winds), #m/s 
               solar  # w/m2
   )
@@ -60,7 +60,7 @@ unitConvert.GLDAS <- function(x, diff_seconds){
 
   ret = cbind(prcp * 86400 ,   # "kg m-2 s-1" (GLDAS ncid$var$Rainf_tavg$units)  to "mm m-2 day" (SHUD)
               temp - t0   , # C
-              rh  ,  # Ratio 0-1
+              rh/100  ,  # Ratio 0-1
               abs(winds), #m/s 
               solar  # w/m2
   )
@@ -84,7 +84,7 @@ unitConvert.CMFD <- function(x){
   p_mm.day[p_mm.day  < 1e-4 ] = 0.0  # prcp < 0.1 mm/day, No rain then.
   ret = cbind(prcp*24  , #mm/hr(CMFD) to mm/day (SHUD 2021.12)
               temp - t0   , # C
-              max(0, min(1, rh/100)  ),  # Ratio 0-1
+              rh/100,  # Ratio 0-1
               abs(winds)  , #m/s to m/s
               solar   )  # w/m2
   ret = round(ret, 4)

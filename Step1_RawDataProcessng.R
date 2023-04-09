@@ -35,6 +35,15 @@ writeshape(wb.g, pd.gcs$wbd)
 
 
 # ================= DEM =================
+if(!file.exists(xfg$fr.dem)){
+  source('Rfunction/getDEM.R')
+  fn.dem.tmp = getDEM_ASTER(fn.wbd = pd.gcs$wbd.buf,
+                            dir.fig = xfg$dir$fig,
+                            dir.out = xfg$dir$out,
+                            fn.out = xfg$fr.dem,
+                            crop=TRUE)
+}
+
 dem0=raster(xfg$fr.dem)
 # -------CROP DEM -----------------
 # Crop the dem AND conver the dem to PCS.
