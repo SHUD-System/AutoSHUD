@@ -1,0 +1,44 @@
+prjname 9035800
+startyear 2001
+endyear 2005
+dir.out ../deploy9035800
+fsp.wbd ./Example/9035800/wbd.shp
+fsp.stm ./Example/9035800/stm_dem.shp
+fr.dem ./Example/9035800/dem.tif
+dout.forc ../deploy9035800/forcing
+
+# Forcing: 
+# -1 Dummy. No data provided.
+# 0 LDAS mode: 0.1 CLDAS, 0.2 FLDAS, 0.3 GLDAS 0.4 NLDAS 0.5 CMFD 0.6 CMIP6
+# 1 Local data: 1.1 Points of metereo-station 1.2 Polygon of coverage
+# Forcing 0.5
+# dir.ldas /Volumes/ForcingData/CMFD/Data_forcing_03hr_010deg
+Forcing 1.1
+fsp.forc ./Example/9035800/meteo.shp
+
+Soil 0.1
+dir.soil /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER
+# fa.soil /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER/hwsd.csv
+# fa.geol /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER/hwsd.csv
+# fn.soil /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER/soil.tif
+# fn.geol /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER/geol.tif
+
+Landuse 0.1
+fn.landuse /Volumes/SpatialData/World/Landuse/USGS_LCI/LCType.tif
+# tab.landuse /Volumes/SpatialData/World/Landuse/USGS_LCI/LCType.tif
+
+NumCells 800
+AqDepth 6
+MaxArea 2
+MinAngle 30
+tol.wb 100
+tol.rivlen 200
+RivWidth 3
+RivDepth 4
+DistBuffer 1500
+flowpath 0
+QuickMode 0
+MAX_SOLVER_STEP 20
+CRYOSPHERE 0
+STARTDAY 0
+ENDDAY 1825

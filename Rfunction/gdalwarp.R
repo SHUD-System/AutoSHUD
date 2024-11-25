@@ -42,7 +42,7 @@ fun.gdalcut <- function(f.in, f.mask, f.out, s_srs=NULL, t_srs=NULL, run=TRUE, o
 #'
 #' Merge multiple tiff files to one file.
 fun.gdalmerge <- function(fin, fout, run=TRUE){
-  cmd.py = '/usr/local/Cellar/gdal/3.6.2_2/lib/python3.11/site-packages/osgeo_utils/gdal_merge.py'
+  # cmd.py = '/usr/local/Cellar/gdal/3.6.2_2/lib/python3.11/site-packages/osgeo_utils/gdal_merge.py'
   if(file.exists(cmd.py)){
     cmd = paste('python3', cmd.py, paste('-o', fout), paste(fin, collapse = ' '))
   }else{

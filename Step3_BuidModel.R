@@ -20,7 +20,8 @@ buf.g = readOGR(pd.pcs$wbd.buf)
 # ==============================================
 AA1=gArea(wbd)
 a.max = min(AA1/xfg$para$NumCells, xfg$para$MaxArea)
-a.max = max(a.max, AA1/18000); #' MaxNumber should be less than 18000
+# a.max = max(a.max, AA1/18000); #' MaxNumber should be less than 18000
+
 q.min = xfg$para$MinAngle;
 tol.wb = xfg$para$tol.wb
 tol.rivlen = xfg$para$tol.rivlen
@@ -33,6 +34,8 @@ names(bm.para)=c('MaxArea_km2', 'tol.wb', 'MaxRivLen')
 print(bm.para)
 ny=length(years)
 nday = 365*ny + round(ny/4) - 1
+
+SS = AA1 / a.max
 
 #' ==============================================
 #' BUFFER
@@ -55,6 +58,17 @@ if(LAKEON){
   plotlake<- function(){}
 }
 
+tri = shud.triangle(wb=wb.simp,q=q.min, a=a.max, S=SS)
+print(nrow(tri$T))
+plot(tri, asp=1, type='n')
+
+# =========Mesh generation=====================================
+pm = shud.mesh(tri, dem=dem, AqDepth = xfg$para$AqDepth)
+spm = sp.mesh2Shape(pm, crs = crs(wbd))
+writeshape(spm, crs(wbd), file=file.path(fin['inpath'], 'gis', 'domain'))
+print(nrow(spm@data))
+ia=getArea(pm)
+nCells = length(spm)
 # generate SHUD .mesh 
 # undebug(shud.triangle)
 # xx=spTransform(readOGR('/Users/leleshu/CloudDrive/Experiment/Summit/cq/sub.shp'), crs(wb1))
@@ -68,16 +82,6 @@ if(LAKEON){
 # plot(wb1);plot(add=T, wb2, col=2); plot(add=T,wb3, col=3 )
 
 # tri = tri1
-tri = shud.triangle(wb=wb.simp,q=q.min, a=a.max)
-plot(tri, asp=1, type='n')
-
-# =========Mesh generation=====================================
-pm = shud.mesh(tri, dem=dem, AqDepth = xfg$para$AqDepth)
-spm = sp.mesh2Shape(pm, crs = crs(wbd))
-writeshape(spm, crs(wbd), file=file.path(fin['inpath'], 'gis', 'domain'))
-print(nrow(spm@data))
-ia=getArea(pm)
-nCells = length(spm)
 
 # plot(sort(ia))
 # stop()
@@ -97,7 +101,7 @@ summary(lens)
 spr = sp.CutSptialLines(sl=riv2, tol=tol.rivlen)
 # writeshape(spr, file=file.path(xfg$dir$predata, 'spr'))
 go.png <- function(){
-  png(file = file.path(xfg$dir$fig, 's3_data_0.png'), height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_data_0.png'), type=fig.type, height=11, width=11, res=100, unit='in')
   plot(dem);  plot(wbd, add=T, border=2, lwd=2); plot(riv2, add=T, lwd=2, col=4); 
   plotlake()
   grid()
@@ -116,7 +120,6 @@ if( xfg$iforcing < 1 ){
   sp.forc = ForcingCoverage(sp.meteoSite = sp.c, 
                                    pcs=xfg$crs.pcs, gcs=xfg$crs.gcs, 
                                    dem=dem, wbd=wbd)
-  
 }else{
   sp.forc = rgdal::readOGR(xfg$fsp.forc)
   sp.forc = rSHUD::ForcingCoverage(sp.meteoSite = sp.forc, 
@@ -130,7 +133,7 @@ write.forc(sp.forc@data, path = xfg$dir$forc,
 
 
 go.png <-function(){
-  png.control(fn=paste0('s3_predata_','data', '.png'), path = xfg$dir$fig, ratio=1)
+  png(file = file.path(xfg$dir$fig, 's3_predata_data.png'), type=fig.type, height=11, width=11, res=100, unit='in')
   plot(dem);grid()
   plot(buf.g, add=T, axes=T, lwd=2)
   plot(wbd, add=T, border=3, lwd=2)
@@ -142,21 +145,15 @@ go.png <-function(){
   dev.off()
 }; go.png();
 
-indata =list(wbd=wbd, riv=riv2, dem=dem)
-graphics.off()
-
-
-# xfg$dir$fig = file.path(xfg$dir$modelin, 'fig')
 gisout = file.path(xfg$dir$modelin, 'gis')
 dir.create(xfg$dir$modelin, showWarnings = F, recursive = T)
 dir.create(xfg$dir$fig, showWarnings = F, recursive = T)
 dir.create(gisout, showWarnings = F, recursive = T)
 
 
-
 # ====== RIVER ======================
 go.png <-function(){
-  png(file = file.path(xfg$dir$fig, 's3_data_1.png'), height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_data_1.png'), type=fig.type, height=11, width=11, res=100, unit='in')
   plot(dem); plot(wb.s2, add=T, border=2, lwd=2); 
   plot(spr, add=T, lwd=2, col=4)  
   plotlake()
@@ -165,7 +162,7 @@ go.png <-function(){
 }; go.png()
 
 go.png <-function(){
-  png.control(fn=paste0('s3_predata','_domain.png'), path = file.path(xfg$dir$fig), ratio=1)
+  png(file = file.path(xfg$dir$fig, 's3_predata_domain.png'), type=fig.type, height=11, width=11, res=100, unit='in')
   plot_sp(spm, 'Zmax', axes=TRUE)
   plot(spr, add=T, col=2, lwd=2)
   mtext(side=3, cex=2, paste0('Ncell = ', nCells))
@@ -208,7 +205,21 @@ spr@data = data.frame(pr@river, pr@rivertype[pr@river$Type,])
 writeshape(spr, crs(wbd), file=file.path(gisout, 'river'))
 
 # Cut the rivers with triangles
-sp.seg=sp.RiverSeg(spm, spr)
+nspr=nrow(spr)
+if(nspr > 10000){
+  for(i in 1:nspr){
+    message(i, '/', nspr)
+    ispr = spr[i, ]
+    iseg = sp.RiverSeg(spm, ispr)
+    if(i<=1){
+      sp.seg=iseg
+    }else{
+      sp.seg=c(sp.seg, iseg)
+    }
+  }
+}else{
+  sp.seg=sp.RiverSeg(spm, spr)
+}
 writeshape(sp.seg, crs(wbd), file=file.path(gisout, 'seg'))
 
 # Generate the River segments table
@@ -226,18 +237,7 @@ pic = shud.ic(ncell = nrow(pm@mesh), nriv = nrow(pr@river), lakestage=lakestage,
 
 # Generate shapefile of mesh domain
 sp.dm = sp.mesh2Shape(pm)
-# png(file = file.path(xfg$dir$fig, 's3_data_2.png'), height=11, width=11, res=100, unit='in')
-# zz = sp.dm@data[,'Zsurf']
-# ord=order(zz)
-# col=terrain.colors(length(sp.dm))
-# plot(sp.dm[ord, ], axes = TRUE, col = col)
-# plot(spr, add=TRUE, lwd=3)
-# mtext(side=3, text=paste0('NumCell = ', length(sp.dem)))
-# grid()
-# dev.off()
-
 # model configuration, parameter
-# debug(shud.para)
 cfg.para = shud.para(nday = nday)
 cfg.para['INIT_MODE']=3
 # calibration
@@ -258,8 +258,8 @@ if(xfg$para$QuickMode){
   asoil[asoil[, 3] > 5, 3] = NA
   ageol[ageol[, 3] > 5, 3] = NA
   fx <- function(x){ x[is.na(x) | is.nan(x)] = mean(x, na.rm=TRUE); return(x) }
-  asoil = apply(asoil, 2, fx)
-  ageol = apply(ageol, 2, fx)
+  asoil = rbind(apply(asoil, 2, fx))
+  ageol = rbind(apply(ageol, 2, fx))
   para.soil = PTF.soil(asoil)
   para.geol = PTF.geol(ageol)
   plot(ageol[, 3], para.geol[, 2], xlab='OM', ylab='KsatV(m_d)', log='x')
@@ -274,7 +274,7 @@ if(xfg$ilanduse == 0.1){
   para.lc = read.df('Table/USGS_GLC.csv')[[1]]
 }
 if(xfg$ilanduse == 0.1){
-  lr = LaiRf.GLC(years=years)
+  lr = LaiRf.GLC(years=(min(years):(max(years))+30) )
 }else{
   r.lc = raster(pd.pcs$lu.r)
   rlc.idx = raster(pd.pcs$lu.idx)
@@ -282,7 +282,7 @@ if(xfg$ilanduse == 0.1){
   stop()
 }
 
-png(file = file.path(xfg$dir$fig, 's3_data_lairl.png'), height=7, width=7, res=300, unit='in')
+png(file = file.path(xfg$dir$fig, 's3_data_lairl.png'), type=fig.type, height=7, width=7, res=300, unit='in')
 par(mfrow=c(2,1))
 col=1:length(alc)
 plot(lr$LAI, col=col, main='LAI'); legend('top', paste0(alc), col=col, lwd=1)
@@ -328,14 +328,18 @@ if(any( is.na(pa)) ){
 pp = shud.env(prjname = xfg$prjname, inpath = xfg$dir$modelin, outpath = xfg$dir$modelout)
 ia= getArea()
 ma=MeshAtt()
-png(file.path(xfg$dir$fig, paste0('hist_Area.png')), width=9, height=9, unit='in', res=200)
+png(file.path(xfg$dir$fig, paste0('hist_Area.png')), type=fig.type, width=9, height=9, unit='in', res=200)
 par(mfrow=c(2, 1))
 hist(ia/1e6, xlab='Area (km2)')
 hist(sqrt(ia)/1e3, xlab='Length (km)')
 par(mfrow=c(1, 1))
 dev.off()
 # ModelInfo()
-message('NCell= ', nCells, '\t Area = ', round(sum(ia))/1e6,
-        '\n\t ia_mean=', mean(ia)/1e6, '\t ia_mean=', sqrt(mean(ia)))
-
+AA= sum(ia)
+message('NCell= ', nCells, '\t Area = ', round(AA)/1e6,
+        ' km2 \n\t ia_mean=', round(mean(ia)/1e6, 4),
+        ' km2 \t ia_mean_m=', round(sqrt(mean(ia)), 4), ' m')
+ra=RiverAtt()
+message('Nriv= ', nrow(ra), '\t Length = ', round(sum(ra$Length))/1e3, 'km',
+        '\n\t rivLen_mean=', mean(ra$Length)/1e3, 'km')
 

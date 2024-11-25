@@ -4,7 +4,7 @@
 # Output is geotiff file with multiple layers.
 # 
 source('GetReady.R')
-PIHM(prjname = prjname, inpath = dir.pihmin, outpath = dir.pihmout)
+shud.evn(prjname = prjname, inpath = dir.pihmin, outpath = dir.pihmout)
 wbd=readOGR(file.path(dir.pihmgis, 'wbd.shp'))
 crs.pcs = crs(wbd)
 cfg.para = readpara()

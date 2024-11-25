@@ -1,0 +1,42 @@
+prjname ljy
+startyear 2018
+endyear 2018
+dir.out /Users/leleshu/CloudDrive/Experiment/水科院/LJY_Reservoir/deploy
+# fsp.wbd /Users/leleshu/CloudDrive/Experiment/水科院/LJY_Reservoir/Data/merit_wbd0.shp
+# fsp.stm /Users/leleshu/CloudDrive/Experiment/水科院/LJY_Reservoir/Data/merit_riv.shp
+fsp.wbd /Users/leleshu/CloudDrive/Experiment/水科院/LJY_Reservoir/Data/wbd_dem.shp
+fsp.stm /Users/leleshu/CloudDrive/Experiment/水科院/LJY_Reservoir/Data/stm_dem.shp
+fr.dem /Users/leleshu/CloudDrive/Experiment/水科院/LJY_Reservoir/Data/dem.tif
+
+# Forcing: 
+# -1 Dummy. No data provided.
+# 0 LDAS mode: 0.1 CLDAS, 0.2 FLDAS, 0.3 GLDAS 0.4 NLDAS 0.5 CMFD 0.6 CMIP6
+# 1 Local data: 1.1 Points of metereo-station 1.2 Polygon of coverage
+Forcing 0.5
+dir.ldas /Volumes/ForcingData/CMFD/Data_forcing_03hr_010deg
+dout.forc /Users/leleshu/CloudDrive/Experiment/水科院/LJY_Reservoir/deploy/forcing
+
+Soil 0.1
+dir.soil /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER
+# fa.soil /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER/hwsd.csv
+# fa.geol /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER/hwsd.csv
+# fn.soil /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER/soil.tif
+# fn.geol /Volumes/SpatialData/World/Soil/HWSD/HWSD_RASTER/geol.tif
+Landuse 0.1
+fn.landuse /Volumes/SpatialData/World/Landuse/USGS_LCI/LCType.tif
+# tab.landuse /Volumes/SpatialData/World/Landuse/USGS_LCI/LCType.tif
+NumCells 2000
+AqDepth 6
+MaxArea 2
+MinAngle 30
+tol.wb 300
+tol.rivlen 100
+RivWidth 3
+RivDepth 4
+DistBuffer 1500
+flowpath 0
+QuickMode 0
+MAX_SOLVER_STEP 20
+CRYOSPHERE 0
+STARTDAY 0
+ENDDAY 365

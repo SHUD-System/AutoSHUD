@@ -1,19 +1,19 @@
 17	6.000						
 INDEX	ALBEDO	VEGFRAC	ROUGH	RZD	SOILDGRD	IMPAF	remark
 0	0.080	0.000	0.020	0.000	0.000	0.000	Water
-1	0.140	0.800	0.070	0.600	0.000	0.000	Evergreen Needle leaf Forest
-2	0.100	0.900	0.070	0.600	0.000	0.000	Evergreen Broadleaf Forest
-3	0.140	0.800	0.070	0.600	0.000	0.000	Deciduous Needle leaf Forest
-4	0.120	0.800	0.070	0.600	0.000	0.000	Deciduous Broadleaf Forest
-5	0.110	0.700	0.060	0.600	0.000	0.000	Mixed Forests
-6	0.120	0.700	0.060	0.000	0.000	0.000	Closed Shrublands
-7	0.180	0.500	0.050	0.400	0.000	0.000	Open Shrublands
-8	0.100	0.625	0.045	0.400	0.000	0.000	Woody Savannas
-9	0.150	0.218	0.045	0.400	0.000	0.000	Savannas
-10	0.150	0.726	0.040	0.400	0.000	0.000	Grasslands
-11	0.100	0.200	0.035	0.000	0.000	0.000	Permanent Wetland
-12	0.250	0.835	0.040	0.400	0.500	0.000	Croplands
-13	0.246	0.200	0.010	0.050	0.900	0.900	Urban and Built-Up
-14	0.200	0.835	0.040	0.400	0.500	0.000	Cropland/Natural Vegetation Mosaic
+1	0.140	0.800	0.070	1.0000	0.000	0.000	Evergreen Needle leaf Forest
+2	0.100	0.900	0.070	1.2500	0.000	0.000	Evergreen Broadleaf Forest
+3	0.140	0.800	0.070	1.0000	0.000	0.000	Deciduous Needle leaf Forest
+4	0.120	0.800	0.070	1.2500	0.000	0.000	Deciduous Broadleaf Forest
+5	0.110	0.700	0.060	1.1250	0.000	0.000	Mixed Forests
+6	0.120	0.700	0.060	0.6508	0.000	0.000	Closed Shrublands
+7	0.180	0.500	0.050	0.5777	0.000	0.000	Open Shrublands
+8	0.100	0.625	0.045	0.9975	0.000	0.000	Woody Savannas
+9	0.150	0.218	0.045	0.8721	0.000	0.000	Savannas
+10	0.150	0.726	0.040	0.7500	0.000	0.000	Grasslands
+11	0.100	0.200	0.035	0.600	0.000	0.000	Permanent Wetland
+12	0.250	0.835	0.040	0.7500	0.500	0.000	Croplands
+13	0.246	0.200	0.010	0.7972	0.900	0.900	Urban and Built-Up
+14	0.200	0.835	0.040	0.7500	0.500	0.000	Cropland/Natural Vegetation Mosaic
 15	0.650	0.000	0.020	0.000	0.000	0.500	Snow and Ice
-16	0.300	0.010	0.035	0.050	0.600	0.000	Barren or Sparsely Vegetated
+16	0.300	0.010	0.035	0.5500	0.600	0.000	Barren or Sparsely Vegetated

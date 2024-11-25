@@ -1,6 +1,6 @@
 # AutoSHUD --- Automatic and Reproducable hydrological model deployment
 
-
+SHUD = Simulator of Hydrologic Unstructured Domains, [https://shud.xyz](https://shud.xyz).
 
 ## Data
 
@@ -26,7 +26,6 @@ Mandatory data from users:
 3. Domain decomposition and model building.
 4. Execution of the hydrologic model
 5. Post-processing, calibration, analysis and visualizing.
-
 
 
 ## 

@@ -10,13 +10,10 @@ outpath=dir.modelout
 # cfg.para['END'] = 20
 # id=which(grepl('DT_', names(cfg.para)))
 # cfg.para[id]=dt.out;
-# write.pc(cfg.para, file=PIHM.filein()['md.para'] )
 # 
 # cfg.calib=readcalib(); cfg.calib
 # cfg.calib[c('EC', 'ETT', 'EDIR')]=dt.out
-# write.pc(cfg.calib, file=PIHM.filein()['md.calib'])
 # 
-# system('./pihm++ vs', wait = TRUE, ignore.stdout = F)
 
 fx.ds <- function(x){ dx = as.numeric(x[nrow(x),]) - as.numeric(x[1,]) }
 pngout = file.path(outpath, 'figure')

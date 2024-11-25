@@ -45,8 +45,8 @@ read.prj <- function(fn.prj){
     # local soil data.
     fn.soil = getVAL(xcfg, 'fn.soil')
     fn.geol = getVAL(xcfg, 'fn.geol')  
-    tab.soil = getVAL(xcfg, 'tab.soil')  
-    tab.geol = getVAL(xcfg, 'tab.geol')  
+    fa.soil = getVAL(xcfg, 'fa.soil')  
+    fa.geol = getVAL(xcfg, 'fa.geol')  
   }else{
     # global soil data.
     dir.soil = getVAL(xcfg, 'dir.soil')  
@@ -65,6 +65,7 @@ read.prj <- function(fn.prj){
   fsp.stm = getVAL(xcfg, 'fsp.stm')
   fsp.forc = getVAL(xcfg, 'fsp.forc')
   fsp.lake = getVAL(xcfg, 'fsp.lake')
+  fn.pfactor = getVAL(xcfg, 'fn.pfactor')
   
   fr.dem = getVAL(xcfg, 'fr.dem')
   if(is.null(fr.dem)){
@@ -81,6 +82,11 @@ read.prj <- function(fn.prj){
   CRYOSPHERE = getVAL(xcfg, 'CRYOSPHERE', TRUE, 0)
   STARTDAY = getVAL(xcfg, 'STARTDAY', TRUE, 0)
   ENDDAY = getVAL(xcfg, 'ENDDAY', TRUE, rSHUD::days_in_year(years))
+  
+  if(!file.exists(fsp.wbd)){
+    message('Error [critical]: fsp.wbds file is missing.')
+    stop()
+  }
   
   crs.fn <- getVAL(xcfg, 'fsp.crs')
   if( !is.null(crs.fn)){
@@ -127,7 +133,14 @@ read.prj <- function(fn.prj){
   if(isoil < 1){
     dirlist = c(dirlist, soil=dir.soil)
   }
-  tmp=lapply(dirlist, dir.create, showWarnings=F, recursive=T)
+  for(i in 1:length(dirlist)){
+    if(is.null(dirlist[[i]])){
+      message('value of directory is NULL', names(dirlist)[i])
+    }else{
+      dir.create(dirlist[[i]], showWarnings=F, recursive=T)
+    }
+  }
+  # tmp=lapply(dirlist, dir.create, showWarnings=F, recursive=T)
   
   
   
@@ -145,9 +158,19 @@ read.prj <- function(fn.prj){
   # ldas.name = getVAL(xcfg, 'LDAS.name')
   # res=  LDAS.ATT[ldas.name]
   if(is.null(fr.dem)){
+    message('!!!file ', fr.dem, 'does not exist.')
     fr.dem =  file.path(dirlist$predata, paste0(prjname, '_gdem.tif'))
+    message('!!!file ', fr.dem, 'does not exist.')
+    message('Error [critical]: fr.dem file is missing.')
+    stop()
   }
-  
+  if(is.null(fn.pfactor)){
+    pfact=NULL
+  }else if(file.exists(fn.pfactor)){
+    pfact=read.table(fn.pfactor)
+  }else{
+    pfact=NULL
+  }
   cfg = list('prjname' = prjname,
              'years' = years,
              'crs.pcs'=crs.pcs,
@@ -184,7 +207,8 @@ read.prj <- function(fn.prj){
                'MAX_SOLVER_STEP' = MAX_SOLVER_STEP,
                'CRYOSPHERE'=CRYOSPHERE,
                'STARTDAY'=STARTDAY,
-               'ENDDAY'=ENDDAY
+               'ENDDAY'=ENDDAY,
+               'PFACT'=pfact
              )
   )
   if(isoil>=1){
@@ -192,8 +216,8 @@ read.prj <- function(fn.prj){
             'isoil' = isoil,
             'fn.soil'=fn.soil,
             'fn.geol'=fn.geol,
-            'tab.soil'=tab.soil,
-            'tab.geol'=tab.geol)
+            'tab.soil'=fa.soil,
+            'tab.geol'=fa.geol)
   }else{
     # void
   }
@@ -209,5 +233,4 @@ read.prj <- function(fn.prj){
   
   return(cfg)
 }
-
-xfg <- read.prj(fn.prj = fn.prj)
+# xfg <- read.prj(fn.prj = fn.prj)

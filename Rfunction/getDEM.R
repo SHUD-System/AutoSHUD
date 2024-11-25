@@ -41,8 +41,8 @@ fun.granule <- function(spx, shrink=FALSE){
   writelog(paste0('Finished.'), caller=caller)
   return(rr)
 }
-#================================================================
-#================================================================
+#' ================================================================
+#' ================================================================
 GDEM_files <- function(fn.bnd,  dir.out, dir.rawdem,
                        dir.fig = dir.out,
                        fn.pre = 'ASTGTMV003_', crs.gcs = crs('+init=epsg:4326'), shrink=TRUE){
@@ -86,7 +86,7 @@ getDEM_ASTER <- function(fn.wbd,
   
   fn.dem = file.path(dir.out, 'GDEM.tif')
   fn.demcrop = file.path(dir.out, 'GDEM_crop.tif')
-  #======== Generate the links ==============
+  #'  ======== Generate the links ==============
   fns.dem = GDEM_files(dir.out=file.path(dir.out, 'GDEM'), 
                        dir.fig = dir.fig, 
                        fn.bnd = fn.wbd, 
@@ -94,7 +94,7 @@ getDEM_ASTER <- function(fn.wbd,
                        shrink = crop)
   writelog(paste('Merging ', length(fns.dem), ' files'), caller=caller)
   if(!file.exists(fn.dem)){
-    #========= mosaic Tiff files =============
+    #' ========= mosaic Tiff files =============
     cmd = fun.gdalmerge(fin = fns.dem, fout = fn.dem)
     writelog(paste('GDDAL command:', cmd), caller=caller)
   }else{

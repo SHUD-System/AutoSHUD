@@ -1,15 +1,16 @@
-# Task:
-# 1. Load the rawdata
-# 2. 
-# 3.
-# 4.
-# 5.
-# 6.
-# 7.
-# 8.
+# Task: Load the rawdata and standardize the data.
+# 加载原始数据，对原始数据进行初步处理
+# 1. 读取建模参数加载必要工具库。
+# 2. 处理建模边界，包括：去孔洞、投影、生成缓冲区等。
+# 3. 处理DEM数据，包括：剪切(从原始数据中提取研究区范围内数据)，栅格数据重投影为PCS。
+# 4. 河网数据处理，包括：数据重投影、河道线段简化、去除重复点、去除重复线段、河流流向一致性检查/修复等。
+# 5. 湖泊数据处理，包括：数据重投影、去除孔洞、边界简化等
+# 6. 绘图，对以上数据处理过程中的原始空间数据和结果数据进行绘图，方便用户检查和确认数据对象和处理结果。
+
 # Notice:
 # 1. The DEM data is merged before this step. The country-wide DEM should be merged.
 # 2. Te wbd and stm data must be ready before this step.
+
 rm(list=ls())
 source('GetReady.R')
 prefix ='S1'
@@ -37,6 +38,7 @@ writeshape(wb.g, pd.gcs$wbd)
 # ================= DEM =================
 if(!file.exists(xfg$fr.dem)){
   source('Rfunction/getDEM.R')
+  # debug(getDEM_ASTER)
   fn.dem.tmp = getDEM_ASTER(fn.wbd = pd.gcs$wbd.buf,
                             dir.fig = xfg$dir$fig,
                             dir.out = xfg$dir$out,
@@ -96,7 +98,8 @@ if(LAKEON){
 
 #' ==== PLOT FIGURE ================
 dem.p = raster(pd.pcs$dem)
-png.control(fn=paste0(prefix, '_Rawdata_Elevation.png'), path = xfg$dir$fig, ratio = 1)
+png(filename = file.path(xfg$dir$fig, paste0(prefix, '_Rawdata_Elevation.png')), type='cairo', 
+    width = 7, height=7, res=300, unit='in')
 plot(dem.p)
 plot(wb.p, add=T, border=2)
 if(LAKEON){

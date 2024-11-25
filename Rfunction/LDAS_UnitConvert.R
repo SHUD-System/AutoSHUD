@@ -79,6 +79,7 @@ unitConvert.CMFD <- function(x){
   press = x[,'Pres']
   
   rh = 0.263*press*SH/exp(17.67 * (temp - t0) /(temp - 29.65) ) # specific hum to relative hum
+  rh[rh > 100]=100
   forcnames = c( "Precip_mm.d", "Temp_C", "RH_1", "Wind_m.s", "RN_w.m2" )
   p_mm.day = prcp * 24 
   p_mm.day[p_mm.day  < 1e-4 ] = 0.0  # prcp < 0.1 mm/day, No rain then.

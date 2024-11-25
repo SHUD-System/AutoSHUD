@@ -1,6 +1,5 @@
 
 SoilGeol <- function(spm, rdsfile){
-  # rdsfile=file.path(dir.pihmgis, 'Soil_sl1.tif')  
   xy = coordinates(spm)
   # plot(xy, asp=1)
   xl=readRDS(rdsfile)
