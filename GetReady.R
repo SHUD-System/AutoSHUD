@@ -17,7 +17,9 @@
 
 args = commandArgs(trailingOnly=TRUE)
 if (length(args)==0) {
-  fn.prj='Example/9035800.autoshud.txt'
+   fn.prj='Example/9035800.autoshud.txt'
+  # fn.prj = '/scratch/leleshu/tarim/Bositeng/bositeng.autoshud.txt'
+  # fn.prj = '/users/leleshu/AutoSHUD-master/bjx.autoshud'
   }else{
   print(args)
   fn.prj = args[1]
@@ -26,6 +28,10 @@ message('Reading project file ', fn.prj)
 
 source('Rfunction/gdalwarp.R')
 source('Rfunction/ReadProject.R')
+source('Rfunction/getDEM.R')
+# xfg <- read.prj(fn.prj = fn.prj, 
+#                 PATH2FD='/Volumes/ForcingData/', 
+#                 PATH2GDEM= '/Volumes/SpatialData/World/DEM/Aster_GDEM/')
 xfg <- read.prj(fn.prj = fn.prj)
 
 if( !is.null(xfg$fsp.lake) ){
@@ -84,4 +90,23 @@ library(ggplot2)
 library(hydroTSM)
 library(hydroGOF)
 library(xts)
+
+# Ensure terra package is detached if loaded to avoid conflicts
+if("terra" %in% (.packages())){
+  detach("package:terra", unload=TRUE)
+}
+
+# Force clean namespace for spatial packages
+if("package:terra" %in% search()) {
+  detach("package:terra", unload=TRUE, force=TRUE)
+}
+
+# Explicitly mask terra functions if they exist
+if("package:terra" %in% search() && exists("raster", where="package:terra")) {
+  raster <- raster::raster
+  unique <- raster::unique
+  reclassify <- raster::reclassify
+  projectRaster <- raster::projectRaster
+  writeRaster <- raster::writeRaster
+}
 fig.type='cairo'

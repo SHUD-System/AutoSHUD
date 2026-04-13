@@ -3,6 +3,11 @@
 fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE, 
                           outdir,  col_ID = 2:5){
   msg = 'fun.Soil_Geol:: '
+  
+  # Ensure terra package is not interfering
+  if("terra" %in% (.packages())){
+    detach("package:terra", unload=TRUE)
+  }
   if(!file.exists(fn.r)){
     message(msg, 'Raster file is missing: ', fn.r)
     stop('STOP WITH ERROR.')
@@ -13,18 +18,23 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
   }
   
   if(file.exists(fn.r)){
-    r=raster(fn.r)
+    # Force use of raster package function explicitly
+    r <- raster::raster(fn.r)
+    # Ensure it's a RasterLayer object
+    if(!inherits(r, "RasterLayer")) {
+      stop(paste(msg, "Failed to create RasterLayer from", fn.r))
+    }
   }else{
-    messge(msg, 'File does not exist or empty: ', fn.r)
+    message(msg, 'File does not exist or empty: ', fn.r)
     stop(paste(msg, 'Exit with error in '))
   }
   # plot(r)
   # x=foreign::read.dbf(fn.tab)
   x=read.table(file=fn.tab, header = TRUE)
   
-  ur =sort(unique(r))
-  nr=length(ur)
-  r1 = reclassify(r, cbind(ur, 1:nr))
+  ur <- sort(raster::unique(r))
+  nr <- length(ur)
+  r1 <- raster::reclassify(r, cbind(ur, 1:nr))
   
   idx = which(x[, 1] %in% ur)
   
@@ -59,7 +69,20 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
   }
   
   write.df(texture, file=fatt)
-  r2 = raster::projectRaster(r1, crs=xfg$crs.pcs)
+  # Check if projection is needed
+  current_crs <- raster::crs(r1)
+  target_crs <- xfg$crs.pcs
+  
+  if(identical(current_crs, target_crs) || 
+     (!is.na(current_crs) && !is.na(target_crs) && 
+      raster::compareCRS(current_crs, target_crs))) {
+    # CRS are the same, no projection needed
+    r2 <- r1
+    message(msg, "CRS are identical, skipping projection")
+  } else {
+    # Project to target CRS
+    r2 <- raster::projectRaster(r1, crs=target_crs)
+  }
   raster::writeRaster(r1, filename = fp, overwrite=TRUE)
   raster::writeRaster(r2, filename = fg, overwrite=TRUE)
   texture[is.na(texture) | is.nan(texture)] = -9999
@@ -72,3 +95,8 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
             'texture' = texture)
   return (rl)
 }
+
+
+# dat.soil = fun.Soil_Geol(xfg$fn.soil, xfg$tab.soil)
+# dat.geol = fun.Soil_Geol(xfg$fn.geol, xfg$tab.geol)
+

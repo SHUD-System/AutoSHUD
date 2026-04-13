@@ -1,15 +1,43 @@
+# --- R / RStudio ---
 .Rproj.user
 .Rhistory
+.Rapp.history
 .RData
+.RDataTmp
 .Ruserdata
+.Renviron
+*.Rcheck/
+
+# --- 项目本地约定（保留）---
 NoSync
 test.R
 Untitled.R
 project.txt
-.DS_Store
-*.zip
 Shiny.R
 back*.R
 bak*.R
 *.R.bak
+
+# --- 系统 ---
+.DS_Store
+Thumbs.db
+
+# --- 编辑器 ---
 *.swp
+*~
+
+# --- 归档 ---
+*.zip
+
+# --- R Markdown / knitr 缓存与中间文件 ---
+*_cache/
+/cache/
+*.utf8.md
+*.knit.md
+
+# --- HTTP 缓存（如下载数据用 httr）---
+.httr-oauth
+
+# --- macOS 复制产生的重复文件（如 `foo 2.R`）---
+* 2.R
+* 2.r
