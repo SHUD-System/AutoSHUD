@@ -39,8 +39,7 @@ echo "== 仓库根目录: $ROOT"
 echo "== 将使用的标签: $TAG"
 echo ""
 
-if ! git rev-parse --verify master >/dev/null 2>&1; thecd /Volumes/CloudDisk/CloudDrive/Development/AutoSHUD
-git statusn
+if ! git rev-parse --verify master >/dev/null 2>&1; then
   echo "错误：当前仓库没有本地分支 master。"
   exit 1
 fi
@@ -98,4 +97,5 @@ echo ""
 echo "建议在 README 顶部增加版本说明：V2 稳定版请使用 GitHub Release 或 --branch $TAG 下载；默认 clone master 为 V3.x 开发版。"
 echo "验证 V2: git clone --branch $TAG https://github.com/SHUD-System/AutoSHUD.git"
 echo "验证 V3: git clone https://github.com/SHUD-System/AutoSHUD.git  # 默认 master = V3.x"
+echo "推荐用户：从 GitHub Releases 下载 v2.0.0 稳定包，或使用 tag 克隆。"
 echo "------------------------------------------------------------"
