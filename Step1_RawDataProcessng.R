@@ -99,7 +99,7 @@ if(LAKEON){
 #' ==== PLOT FIGURE ================
 dem.p = terra::rast(pd.pcs$dem)
 png(filename = file.path(xfg$dir$fig, paste0(prefix, '_Rawdata_Elevation.png')), type='cairo', 
-    width = 7, height=7, res=300, unit='in')
+    width = 7, height=7, res=300, units='in')
 plot(dem.p)
 plot(sf::st_geometry(wb.p), add = TRUE, border = 2)
 if(LAKEON){

@@ -105,7 +105,7 @@ summary(lens)
 spr = sf::st_as_sf(sp.CutSptialLines(sl = riv2, tol = tol.rivlen))
 # writeshape(spr, file=file.path(xfg$dir$predata, 'spr'))
 go.png <- function(){
-  png(file = file.path(xfg$dir$fig, 's3_data_0.png'), type=fig.type, height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_data_0.png'), type=fig.type, height=11, width=11, res=100, units='in')
   plot(dem);  plot(sf::st_geometry(wbd), add = TRUE, border = 2, lwd = 2); plot(sf::st_geometry(riv2), add = TRUE, lwd = 2, col = 4);
   plotlake()
   grid()
@@ -139,7 +139,7 @@ write_forc(sf::st_drop_geometry(sp.forc), path = xfg$dir$forc,
 
 
 go.png <-function(){
-  png(file = file.path(xfg$dir$fig, 's3_predata_data.png'), type=fig.type, height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_predata_data.png'), type=fig.type, height=11, width=11, res=100, units='in')
   plot(dem);grid()
   plot(sf::st_geometry(buf.g), add = TRUE, axes = TRUE, lwd = 2)
   plot(sf::st_geometry(wbd), add = TRUE, border = 3, lwd = 2)
@@ -153,7 +153,7 @@ go.png <-function(){
 
 # ====== RIVER ======================
 go.png <-function(){
-  png(file = file.path(xfg$dir$fig, 's3_data_1.png'), type=fig.type, height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_data_1.png'), type=fig.type, height=11, width=11, res=100, units='in')
   plot(dem); plot(sf::st_geometry(wb.s2), add = TRUE, border = 2, lwd = 2);
   plot(sf::st_geometry(spr), add = TRUE, lwd = 2, col = 4)
   plotlake()
@@ -162,8 +162,8 @@ go.png <-function(){
 }; go.png()
 
 go.png <-function(){
-  png(file = file.path(xfg$dir$fig, 's3_predata_domain.png'), type=fig.type, height=11, width=11, res=100, unit='in')
-  plot_polygons(spm, field = 'Zmax', axes=TRUE)
+  png(file = file.path(xfg$dir$fig, 's3_predata_domain.png'), type=fig.type, height=11, width=11, res=100, units='in')
+  plot_polygons(spm, field = 'Zsurf', axes=TRUE)
   plot(sf::st_geometry(spr), add=TRUE, col=2, lwd=2)
   mtext(side=3, cex=2, paste0('Ncell = ', nCells))
   plotlake()
@@ -269,7 +269,7 @@ if(xfg$ilanduse == 0.1){
   stop()
 }
 
-png(file = file.path(xfg$dir$fig, 's3_data_lairl.png'), type=fig.type, height=7, width=7, res=300, unit='in')
+png(file = file.path(xfg$dir$fig, 's3_data_lairl.png'), type=fig.type, height=7, width=7, res=300, units='in')
 par(mfrow=c(2,1))
 col=1:length(alc)
 plot(lr$LAI, col=col, main='LAI'); legend('top', paste0(alc), col=col, lwd=1)
@@ -315,7 +315,7 @@ if(any( is.na(pa)) ){
 pp = shud.env(prjname = xfg$prjname, inpath = xfg$dir$modelin, outpath = xfg$dir$modelout)
 ia= getArea()
 ma=MeshAtt()
-png(file.path(xfg$dir$fig, paste0('hist_Area.png')), type=fig.type, width=9, height=9, unit='in', res=200)
+png(file.path(xfg$dir$fig, paste0('hist_Area.png')), type=fig.type, width=9, height=9, units='in', res=200)
 par(mfrow=c(2, 1))
 hist(ia/1e6, xlab='Area (km2)')
 hist(sqrt(ia)/1e3, xlab='Length (km)')
