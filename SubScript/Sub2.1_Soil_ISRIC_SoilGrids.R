@@ -36,9 +36,9 @@ for(i in 1:nf){
   r = terra::rast(ffns[i])
   png.control(fn=paste0(fns1[i],'.png'), path = file.path(dir.png,'Rawdata_Soil'), ratio=1)
   plot(r)
-  plot(wbd.buf, add=T, axes=T, lwd=2)
-  plot(wbd, add=T, border=3, lwd=2)
-  plot(stm, add=T, col=2, lwd=2)
+  plot(sf::st_geometry(wbd.buf), add=TRUE, axes=TRUE, lwd=2)
+  plot(sf::st_geometry(wbd), add=TRUE, border=3, lwd=2)
+  plot(sf::st_geometry(stm), add=TRUE, col=2, lwd=2)
   title(fns[i])
   dev.off()
 }

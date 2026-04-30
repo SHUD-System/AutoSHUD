@@ -31,7 +31,7 @@ check.surfy <- function(){
   id=which(sf > 1)
   print(id)
   plot(spm);
-  plot(add=TRUE, spm[id, ], col=2)
+  plot(sf::st_geometry(spm[id, ]), add=TRUE, col=2)
 }
 # check.surfy()
 

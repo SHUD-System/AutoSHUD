@@ -38,7 +38,7 @@ mat=mat*0+1
 png.control(fn=paste0('Rawdata','_FLDAS_location.png'), path = file.path(dir.png), ratio=1)
 image(xloc, yloc, mat, xlab='Lon', ylab='Lat', main='Coverage of FLDAS') ; grid()
 points(xloc[xid], yloc[yid], col=3)
-plot(wbd.gcs, add=T)
+plot(sf::st_geometry(wbd.gcs), add=TRUE)
 dev.off()
 
 nv=length(vns)

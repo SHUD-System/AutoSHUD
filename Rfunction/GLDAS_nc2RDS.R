@@ -25,7 +25,7 @@ r = xyz2Raster(x = nc.all)
 r.sub = xyz2Raster(x = nc.sub)
 
 plot(r.sub); 
-plot(add=T, buf.g)
+plot(sf::st_geometry(buf.g), add=TRUE)
 
 vns = names(fid$var)
 vns = vns[! grepl('time', tolower(vns))] # don't need the time_bnds
@@ -33,7 +33,7 @@ vns = vns[! grepl('time', tolower(vns))] # don't need the time_bnds
 png.control(fn=paste0(prefix, '_LDAS_location.png'), path = xfg$dir$fig, ratio=1)
 plot(r * 0, col='gray', legend=FALSE)
 plot(r.sub * 0, col='red', legend=FALSE, add=TRUE)
-plot(buf.g, add=T)
+plot(sf::st_geometry(buf.g), add=TRUE)
 dev.off()
 
 # =========Get the data===========================

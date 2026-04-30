@@ -51,7 +51,7 @@ plot(wb.simp)
 if(LAKEON){
   source('SubScript/Sub3_lake.R')  
   plotlake <- function(){
-    plot(sp.lake, add=T, border='darkblue', col=rgb(0, 0.7, 0, 0.25))
+    plot(sf::st_geometry(sp.lake), add=TRUE, border='darkblue', col=rgb(0, 0.7, 0, 0.25))
   }
 }else{
   sp.lake=NULL
@@ -166,7 +166,7 @@ go.png <-function(){
 go.png <-function(){
   png(file = file.path(xfg$dir$fig, 's3_predata_domain.png'), type=fig.type, height=11, width=11, res=100, unit='in')
   plot_sp(spm, 'Zmax', axes=TRUE)
-  plot(spr, add=T, col=2, lwd=2)
+  plot(sf::st_geometry(spr), add=TRUE, col=2, lwd=2)
   mtext(side=3, cex=2, paste0('Ncell = ', nCells))
   plotlake()
   grid()
