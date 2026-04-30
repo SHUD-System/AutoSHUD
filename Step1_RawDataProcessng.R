@@ -22,17 +22,17 @@ wbd0 = sf::st_make_valid(sf::st_buffer(wbd0, dist = 0)) # Remove error from irre
 
 # wbd in pcs
 wb.p = sf::st_transform(wbd0, xfg$crs.pcs)
-sf::st_write(wb.p, dsn = paste0(pd.pcs$wbd, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(wb.p, dsn = pd.pcs$wbd, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 # buffer of wbd in pcs
 buf.p = sf::st_buffer(wb.p, dist = xfg$para$DistBuffer)
-sf::st_write(buf.p, dsn = paste0(pd.pcs$wbd.buf, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(buf.p, dsn = pd.pcs$wbd.buf, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 buf.g = sf::st_transform(buf.p, xfg$crs.gcs)
-sf::st_write(buf.g, dsn = paste0(pd.gcs$wbd.buf, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(buf.g, dsn = pd.gcs$wbd.buf, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 wb.g = sf::st_transform(wb.p, xfg$crs.gcs)
-sf::st_write(wb.g, dsn = paste0(pd.gcs$wbd, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(wb.g, dsn = pd.gcs$wbd, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 
 # ================= DEM =================
@@ -83,17 +83,17 @@ if(xfg$para$flowpath){
   stm.p = stm1
 }
 
-sf::st_write(stm.p, dsn = paste0(pd.pcs$stm, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(stm.p, dsn = pd.pcs$stm, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 #' ==========================================
 if(LAKEON){
   spl0 = sf::st_read(xfg$fsp.lake, quiet = TRUE)  # data 0: raw data
   spl1 = sf::st_as_sf(terra::fillHoles(terra::vect(spl0)))
   spl.gcs = sf::st_transform(spl1, xfg$crs.gcs)
-  sf::st_write(spl.gcs, dsn = paste0(pd.gcs$lake, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+  sf::st_write(spl.gcs, dsn = pd.gcs$lake, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
   
   spl.pcs = sf::st_transform(spl.gcs, xfg$crs.pcs)  # data 1: PCS
-  sf::st_write(spl.pcs, dsn = paste0(pd.pcs$lake, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+  sf::st_write(spl.pcs, dsn = pd.pcs$lake, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 }
 
 #' ==== PLOT FIGURE ================

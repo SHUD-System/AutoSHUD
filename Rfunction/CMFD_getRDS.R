@@ -34,9 +34,9 @@ sp.pg = fishnet(xx = seq(ext.nc[1], ext.nc[2], by=dx),
 # stop()
 
 fid = nc_open(fn) 
-nc.all = rSHUD::read_nc_data(fid, variables = 1)
+nc.all = rSHUD::readnc(fid, varid = 1)
 round(range(nc.all$y, na.rm = T), 3)
-nc.sub = rSHUD::read_nc_data(fid, variables = vn, extent = ext)
+nc.sub = rSHUD::readnc(fid, varid = vn, ext = ext)
 nc_close(fid)
 nc.all$x = round(nc.all$x, 3);   nc.all$y = round(nc.all$y, 3)
 nc.sub$x = round(nc.sub$x, 3);   nc.sub$y = round(nc.sub$y, 3)
@@ -60,8 +60,8 @@ if(is.null(sp.ldas)){
   sp0.pcs = sf::st_transform(sp.ldas, xfg$crs.pcs)
 }
 id = which(lengths(sf::st_intersects(sp0.gcs, buf.g)) > 0)
-sf::st_write(sp0.gcs[id, ], dsn = paste0(pd.gcs$meteoCov, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
-sf::st_write(sp0.pcs[id, ], dsn = paste0(pd.pcs$meteoCov, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(sp0.gcs[id, ], dsn = pd.gcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(sp0.pcs[id, ], dsn = pd.pcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 sitenames = paste0('X', sp0.gcs$xcenter, 'Y', sp0.gcs$ycenter)
 sitenames=sitenames[id]
 

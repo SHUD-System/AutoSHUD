@@ -14,7 +14,8 @@ ia=getArea(); AA = sum(ia)
 res=round(sqrt(mean(ia)), -2)
 rmask=shud.mask(cellsize = res)
 spr=read_river_sp()
-oid=get_river_outlets()
+pr=read_river()
+oid=get_river_outlets(pr@river$Down)
 vns= c("eleysurf","eleyunsat","eleygw",
        "elevprcp","elevetp",
        "elevinfil","elevrech",

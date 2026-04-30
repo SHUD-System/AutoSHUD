@@ -13,6 +13,10 @@ source('GetReady.R')
 # source('Rfunction/fun.LAIRL.R')
 # source('Rfunction/fun.Meteo.R')
 fin <- shud.filein(xfg$prjname, inpath = xfg$dir$modelin, outpath= xfg$dir$modelout)
+gisout = file.path(xfg$dir$modelin, 'gis')
+dir.create(xfg$dir$modelin, showWarnings = F, recursive = T)
+dir.create(xfg$dir$fig, showWarnings = F, recursive = T)
+dir.create(gisout, showWarnings = F, recursive = T)
 wbd = sf::st_read(pd.pcs$wbd, quiet = TRUE)
 dem = terra::rast(pd.pcs$dem)
 buf.g = sf::st_read(pd.pcs$wbd.buf, quiet = TRUE)
@@ -146,12 +150,6 @@ go.png <-function(){
   title('DEM-WBD-RIV')
   dev.off()
 }; go.png();
-
-gisout = file.path(xfg$dir$modelin, 'gis')
-dir.create(xfg$dir$modelin, showWarnings = F, recursive = T)
-dir.create(xfg$dir$fig, showWarnings = F, recursive = T)
-dir.create(gisout, showWarnings = F, recursive = T)
-
 
 # ====== RIVER ======================
 go.png <-function(){

@@ -10,17 +10,17 @@ wbd.dis = sf::st_as_sf(terra::fillHoles(terra::vect(sf::st_union(wbd0))))
 
 # wbd in pcs
 wb.p = sf::st_transform(wbd0, xfg$crs.pcs)
-sf::st_write(wb.p, dsn = paste0(pd.pcs$wbd, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(wb.p, dsn = pd.pcs$wbd, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 # buffer of wbd in pcs
 buf.p = sf::st_buffer(wb.p, dist = xfg$para$DistBuffer)
-sf::st_write(buf.p, dsn = paste0(pd.pcs$wbd.buf, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(buf.p, dsn = pd.pcs$wbd.buf, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 buf.g = sf::st_transform(buf.p, xfg$crs.gcs)
-sf::st_write(buf.g, dsn = paste0(pd.gcs$wbd.buf, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(buf.g, dsn = pd.gcs$wbd.buf, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 wb.g = sf::st_transform(wb.p, xfg$crs.gcs)
-sf::st_write(wb.g, dsn = paste0(pd.gcs$wbd, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(wb.g, dsn = pd.gcs$wbd, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 
 # ================= DEM =================
@@ -50,7 +50,7 @@ if(RIVERON){
   }
   stm1 = fun.simplifyRiver()
   stm.p = calc_river_path(stm1)$paths  # clean data with flowpath.
-  sf::st_write(stm.p, dsn = paste0(pd.pcs$stm, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+  sf::st_write(stm.p, dsn = pd.pcs$stm, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 }
 # ==== PLOT FIGURE ================
 dem.p = terra::rast(pd.pcs$dem)

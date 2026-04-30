@@ -14,10 +14,10 @@ id = which(lengths(sf::st_intersects(sp.fn, buf.g)) > 0)
 sp.ldas = sp.fn[id,]
 plot(sf::st_geometry(sp.ldas)); plot(sf::st_geometry(buf.g), add = TRUE, border = 3); plot(sf::st_geometry(wb.g), add = TRUE, border = 2)
 # writeshape(sp.ldas, file=file.path(dir.predata, 'LDAS_GCS'))
-sf::st_write(sp.ldas, dsn = paste0(pd.gcs$meteoCov, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(sp.ldas, dsn = pd.gcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 sp.ldas.pcs = sf::st_transform(sp.ldas, xfg$crs.pcs)
-sf::st_write(sp.ldas.pcs, dsn = paste0(pd.pcs$meteoCov, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(sp.ldas.pcs, dsn = pd.pcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 # writeshape(sp.ldas.pcs, file=file.path(dir.predata, 'LDAS'))
 
 png(filename = file.path(xfg$dir$fig, paste0(prefix, '_LDAS.png')), height = 7, width = 7, res = 300, unit = 'in')

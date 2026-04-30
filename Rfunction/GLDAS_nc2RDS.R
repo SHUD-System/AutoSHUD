@@ -19,8 +19,8 @@ dir.years = file.path(xfg$dir.ldas, xfg$years)
 ndir = length(dir.years)
 fn=list.files(xfg$dir.ldas, pattern=glob2rx('*.nc4'), recursive = T, full.names = T)[1]
 fid=nc_open(fn)  #打开一个NC文件
-nc.all = rSHUD::read_nc_data(fid, variables = 2)
-nc.sub = rSHUD::read_nc_data(fid, variables = 2, extent = ext)
+nc.all = rSHUD::readnc(fid, varid = 2)
+nc.sub = rSHUD::readnc(fid, varid = 2, ext = ext)
 r = xyz2Raster(x = nc.all)
 r.sub = xyz2Raster(x = nc.sub)
 
@@ -46,8 +46,8 @@ plot(sf::st_geometry(sp.forc)); plot(sf::st_geometry(buf.g), add = TRUE)
 
 sp0.gcs = sf::st_transform(sp.forc, xfg$crs.gcs)
 sp0.pcs = sf::st_transform(sp.forc, xfg$crs.pcs)
-sf::st_write(sp0.gcs, dsn = paste0(pd.gcs$meteoCov, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
-sf::st_write(sp0.pcs, dsn = paste0(pd.pcs$meteoCov, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(sp0.gcs, dsn = pd.gcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(sp0.pcs, dsn = pd.pcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 
 
@@ -71,7 +71,7 @@ for (idd in 1:ndir) {
       message('\t', j, '/', nf, '\t', basename(fn))
       ncid = nc_open(fn)
       # debug(readnc)
-      x.nc = read_nc_data(ncid, variables=vns, extent=ext)
+      x.nc = readnc(ncid, varid = vns, ext = ext)
       nc_close(ncid)
       if(j == 1){
         d3 = dim(x.nc$arr)
