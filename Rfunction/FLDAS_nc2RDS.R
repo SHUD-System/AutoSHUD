@@ -35,7 +35,7 @@ vns = vns[!(vns %in% 'time_bnds')] # don't need the time_bnds
 
 mat=ncvar_get(fid, vns[2])
 mat=mat*0+1
-png.control(fn=paste0('Rawdata','_FLDAS_location.png'), path = file.path(dir.png), ratio=1)
+png(filename = file.path(file.path(dir.png), paste0('Rawdata','_FLDAS_location.png')), height = 7, width = 7, res = 300, unit = 'in')
 image(xloc, yloc, mat, xlab='Lon', ylab='Lat', main='Coverage of FLDAS') ; grid()
 points(xloc[xid], yloc[yid], col=3)
 plot(sf::st_geometry(wbd.gcs), add=TRUE)

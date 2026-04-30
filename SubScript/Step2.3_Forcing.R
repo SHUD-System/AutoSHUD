@@ -25,12 +25,12 @@ id = which(lengths(sf::st_intersects(sp.fn, wbd.gcs)) > 0)
 sp.ldas = sp.fn[id,]
 plot(sf::st_geometry(sp.ldas)); plot(sf::st_geometry(wbd.gcs), add = TRUE)
 sp.ldas
-writeshape(sp.ldas, file = file.path(dir.predata, 'LDAS_GCS'))
+sf::st_write(sp.ldas, dsn = paste0(file.path(dir.predata, 'LDAS_GCS'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 sp.ldas.pcs = sf::st_transform(sp.ldas, sf::st_crs(wbd.buf))
-writeshape(sp.ldas.pcs, file = file.path(dir.predata, 'LDAS'))
+sf::st_write(sp.ldas.pcs, dsn = paste0(file.path(dir.predata, 'LDAS'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
-png.control(fn=paste0('Rawdata','_LDAS.png'), path = file.path(dir.png), ratio=1)
+png(filename = file.path(file.path(dir.png), paste0('Rawdata','_LDAS.png')), height = 7, width = 7, res = 300, unit = 'in')
 plot(sf::st_geometry(sp.fn), axes = TRUE); grid()
 plot(sf::st_geometry(sp.ldas), add = TRUE, col = 3)
 plot(sf::st_geometry(wbd.gcs), add = TRUE, border = 4, lwd = 2)

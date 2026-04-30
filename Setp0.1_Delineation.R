@@ -65,8 +65,8 @@ Delineation <- function(CV,
     rv = terra::values(r, mat = FALSE)
     idx = which.max(replace(rv, is.na(rv), -Inf))
     ll.outlets = terra::xyFromCell(r, idx)
-    sp.outlets = sf::st_as_sf(rSHUD::xy2shp(ll.outlets, crs = terra::crs(r)))
-    rSHUD::writeshape(sp.outlets, file = fsp.outlets)
+    sp.outlets = sf::st_as_sf(as.data.frame(ll.outlets), coords = c(1, 2), crs = terra::crs(r))
+    sf::st_write(sp.outlets, dsn = fsp.outlets, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
   }
   if(!file.exists(fsp.outlets)){
     do_outlets()
@@ -86,7 +86,7 @@ Delineation <- function(CV,
   sp.stm = sf::st_read(fsp.stm, quiet = TRUE)
   sf::st_crs(sp.stm) = sf::st_crs(terra::crs(terra::rast(fnr.stm)))
   spx = suppressWarnings(sf::st_intersection(sp.stm, sf::st_union(sp.wbd)))
-  rSHUD::writeshape(spx, file = fsp.stm)
+  sf::st_write(spx, dsn = fsp.stm, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
   
   writelog(paste0('Plot watershed_delineation.png'), caller = caller)
   png(filename = file.path(dir.fig, paste0('watershed_delineation.png')), height = 7, width = 7, res = 300, unit = 'in')

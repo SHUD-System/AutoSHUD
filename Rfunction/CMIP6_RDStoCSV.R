@@ -47,7 +47,7 @@ for(i in 1:nx){
   fn=fns[i]
   message(i,'/', nx, '\t', fn)
   xl[[i]] = fixdata(xl[[i]])
-  write.tsd(xl[[i]], file.path(xfg$dir$forc, fn))
+  write_tsd(xl[[i]], file.path(xfg$dir$forc, fn))
   if(i==1){
     xmean = xl[[i]]
     pp=xl[[i]]$Precip_mm.d
@@ -60,9 +60,7 @@ plot(pp)
 xm = xmean/nx
 saveRDS(xm, file.path(xfg$dir$forc, 'forc.mean.RDS'))
 
-png.control(fn=paste0('Rawdata','_CMIP6_TS.png'),
-            path = file.path(xfg$dir$fig), ratio=1)
+png(filename = file.path(file.path(xfg$dir$fig), paste0('Rawdata','_CMIP6_TS.png')), height = 7, width = 7, res = 300, unit = 'in')
 plot.zoo(xm, main='CMIP6')
 dev.off()
 plot.zoo(xm, main='CMIP6')
-

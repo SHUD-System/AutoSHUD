@@ -45,7 +45,7 @@ ux = sort(stats::na.omit(unique(terra::values(r))))
 nx=length(ux)
 df=read.table(file=xfg$ldas$att, sep=',', header = TRUE)
 subdf = df[ux, ]
-write.df(subdf, file = xfg$tab.forc)
+write_df(subdf, file = xfg$tab.forc)
 plot.ldas <- function(key='LDAS',fnr, sp.wbd=NULL, sp.riv=NULL){
   png(filename = file.path(xfg$dir$fig, paste0('ETV_', key, '.png')), height = 7, width = 7, units = 'in', res = 300)
   par(mar=c(2, 2, 1, 1) )

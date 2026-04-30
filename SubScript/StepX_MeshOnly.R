@@ -10,17 +10,17 @@ wbd.dis = sf::st_as_sf(terra::fillHoles(terra::vect(sf::st_union(wbd0))))
 
 # wbd in pcs
 wb.p = sf::st_transform(wbd0, xfg$crs.pcs)
-writeshape(wb.p, file = pd.pcs$wbd)
+sf::st_write(wb.p, dsn = paste0(pd.pcs$wbd, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 # buffer of wbd in pcs
 buf.p = sf::st_buffer(wb.p, dist = xfg$para$DistBuffer)
-writeshape(buf.p, file = pd.pcs$wbd.buf)
+sf::st_write(buf.p, dsn = paste0(pd.pcs$wbd.buf, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 buf.g = sf::st_transform(buf.p, xfg$crs.gcs)
-writeshape(buf.g, file = pd.gcs$wbd.buf)
+sf::st_write(buf.g, dsn = paste0(pd.gcs$wbd.buf, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 wb.g = sf::st_transform(wb.p, xfg$crs.gcs)
-writeshape(wb.g, file = pd.gcs$wbd)
+sf::st_write(wb.g, dsn = paste0(pd.gcs$wbd, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 
 # ================= DEM =================
@@ -49,12 +49,12 @@ if(RIVERON){
     stm1
   }
   stm1 = fun.simplifyRiver()
-  stm.p = sf::st_as_sf(sp.RiverPath(stm1)$sp)  # clean data with flowpath.
-  writeshape(stm.p, file = pd.pcs$stm)
+  stm.p = calc_river_path(stm1)$paths  # clean data with flowpath.
+  sf::st_write(stm.p, dsn = paste0(pd.pcs$stm, ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 }
 # ==== PLOT FIGURE ================
 dem.p = terra::rast(pd.pcs$dem)
-png.control(fn=paste0(prefix, '_Rawdata_Elevation.png'), path = xfg$dir$fig, ratio = 1)
+png(filename = file.path(xfg$dir$fig, paste0(prefix, '_Rawdata_Elevation.png')), height = 7, width = 7, res = 300, unit = 'in')
 plot(dem.p)
 plot(sf::st_geometry(wb.p), add = TRUE, border = 2)
 if(RIVERON){
@@ -102,6 +102,6 @@ plot(wb.simp)
 tri = shud.triangle(wb=wb.simp,q=q.min, a=a.max)
 plot(tri, asp=1, type='n')
 pm=shud.mesh(tri,dem=dem, AqDepth = xfg$para$AqDepth)
-spm = sf::st_as_sf(sp.mesh2Shape(pm, crs = sf::st_crs(wbd)))
-writeshape(spm, file = file.path(fin['inpath'], 'gis', 'domain'))
+spm = mesh_to_sf(pm, crs = sf::st_crs(wbd))
+sf::st_write(spm, dsn = paste0(file.path(fin['inpath'], 'gis', 'domain'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 print(nrow(spm))

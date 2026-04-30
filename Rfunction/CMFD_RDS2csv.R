@@ -54,7 +54,7 @@ fns=paste0(sitename, '.csv')
 for(i in 1:nx){
   fn=fns[i]
   message(i,'/', nx, '\t', fn)
-  write.tsd(xl[[i]], file.path(xfg$dir$forc, fn))
+  write_tsd(xl[[i]], file.path(xfg$dir$forc, fn))
   if(i==1){
     xmean = xl[[i]]
   }else{

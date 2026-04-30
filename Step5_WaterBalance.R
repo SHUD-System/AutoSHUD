@@ -18,17 +18,17 @@ outpath=dir.modelout
 fx.ds <- function(x){ dx = as.numeric(x[nrow(x),]) - as.numeric(x[1,]) }
 pngout = file.path(outpath, 'figure')
 dir.create(pngout, recursive = T, showWarnings = F)
-pr=readriv()
-oid=getOutlets(pr)
-pm = readmesh()
+pr=read_river()
+oid=get_river_outlets(pr@river$Down)
+pm = read_mesh()
 ia=getArea()
 AA=sum(ia)
-seg=readrivseg()
-cfg.para=readpara()
+seg=read_rivseg()
+cfg.para=read_para()
 dt=as.numeric(cfg.para['DT_QR_DOWN'])
 minfo = c(Ncell = length(ia), Nriv=nrow(pr@river), Nseg =nrow(seg),
           AreaMean = mean(ia))
-xinit= readic()
+xinit= read_ic()
 vns=c(paste0('eley',c( 'surf' ) ), 
       paste0('elev',c('prcp') ),
       'elevinfil', 'elevrech', 'eleqsurf',
@@ -36,13 +36,13 @@ vns=c(paste0('eley',c( 'surf' ) ),
       paste0('elevet', c('p', 'tr', 'ic', 'ev')),
       paste0('rivy','stage'),
       paste0('rivq',c('down', 'sub', 'surf')) ) 
-att=readatt()
-geol=readgeol(); soil=readsoil()
+att=read_att()
+geol=read_geol(); soil=read_soil()
 porosity = geol[att[, 'GEOL'], 4]- geol[att[, 'GEOL'], 5]
 xl = BasicPlot(varname=vns, plot = T, imap = F, return = T, iRDS = F)
 
 smax = apply(xl$eleysurf, 2, max)
-spm=sp.mesh2Shape(dbf = smax)
+spm=mesh_to_sf(dbf = smax)
 prcp = xl$elevprcp[,1]
 nt=nrow(prcp)
 ma=t(matrix(rep(ia, nt), ncol=nt))
@@ -88,4 +88,3 @@ message('Mass-Balance Error = ',
         formatC(Snet, format = "e", digits = 1), 'mm\t',
         round(MB*100, 3), '%')
 plot(xl$rivystage)
-

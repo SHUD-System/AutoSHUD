@@ -25,7 +25,7 @@ wb.p = sf::st_read(pd.pcs$wbd, quiet = TRUE)
 stm.p = sf::st_read(pd.pcs$stm, quiet = TRUE)
 
 go.plot <- function(){
-  tab = read.df('Table/USGS_GLC.csv', sep='\t')[[1]]
+  tab = read_df('Table/USGS_GLC.csv', sep='\t')[[1]]
   clr = read.table('Table/LCType_color.clr', sep='\t')
   tocol = function(x){rgb(x[, 1], x[, 2],x[, 3], min(1, x[, 4]) )
   }

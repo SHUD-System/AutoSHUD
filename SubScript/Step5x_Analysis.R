@@ -8,24 +8,24 @@ pp = shud.env(prjname = xfg$prjname, inpath = xfg$dir$modelin, outpath = xfg$dir
 ia=getArea(); AA = sum(ia)
 res=round(sqrt(mean(ia)), -2)
 ncell=length(ia)
-spm = sf::st_as_sf(sp.mesh2Shape())
+spm = mesh_to_sf()
 # rmask=shud.mask(cellsize = res)
 # spr=readriv.sp()
-oid=getOutlets()
-att=readatt()
+oid=get_river_outlets()
+att=read_att()
 ilc=unique(att$LC)
 table(att$LC)
-q=readout('rivqdown')
-pp=readout('elevprcp')
-eleygw=readout('eleygw')
-eleysnow=readout('eleysnow')
+q=read_output('rivqdown')
+pp=read_output('elevprcp')
+eleygw=read_output('eleygw')
+eleysnow=read_output('eleysnow')
 
 check.rivstage <- function(){
-  rivystage=readout('rivystage')
+  rivystage=read_output('rivystage')
   plot(rivystage)
 }
 check.surfy <- function(){
-  eleysurf=readout('eleysurf')
+  eleysurf=read_output('eleysurf')
   plot(eleysurf)
   sf=apply(eleysurf, 2, max)
   id=which(sf > 1)
@@ -41,18 +41,18 @@ sn = apply.daily(eleysnow, sum)/ncell
 isn = apply(eleysnow, 2, mean)
 igw = apply(eleygw, 2, mean)
 spm = cbind(spm, isnow = isn, igw = igw)
-plot_sp(spm, 'isnow')
-plot_sp(spm, 'igw')
+plot_polygons(spm, field = 'isnow')
+plot_polygons(spm, field = 'igw')
 plot(sn)
 # plot(sn[-1*1:100,])
-lai=read.tsd(file = shud.filein()['md.lai'])[[1]]
-para.lc =readlc()
+lai=read_tsd(file = shud.filein()['md.lai'])[[1]]
+para.lc =read_lc()
 para.lc[ilc, ]
 
 table(att$LC)/ncell * 100
 # plot(lai[, ilc])
 pq = cbind(p*1000, q[,oid])
 pq.h = cbind(p*1000, q[,oid]/AA*3*1000)
-gg=hydrograph(pq, ylabs = c('Prcp (mm/day)', 'Discharge (m3/day)' ) )
+gg=plot_hydrograph(pq, ylabs = c('Prcp (mm/day)', 'Discharge (m3/day)' ) )
 gg
 ggsave('Hydrograph.png', gg)

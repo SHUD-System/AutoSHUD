@@ -69,13 +69,13 @@ for(i in 1:nx){
   fn=fns[i]
   # write this in correct format
   # write.tsd.custom(xl[[i]], file.path(xfg$dir$forc, fn))
-  write.tsd(xl[[i]], file.path(xfg$dir$forc, fn))
+  write_tsd(xl[[i]], file.path(xfg$dir$forc, fn))
   if(i==1){
     xmean = xl[[i]]
   }else{
     xmean = xmean + xl[[i]]
   }
 }
-png.control(fn=paste0('Rawdata','_FLDAS_TS.png'), path = file.path(xfg$dir$fig), ratio=1)
+png(filename = file.path(file.path(xfg$dir$fig), paste0('Rawdata','_FLDAS_TS.png')), height = 7, width = 7, res = 300, unit = 'in')
 plot.zoo(xmean/nx, main='FLDAS')
 dev.off()

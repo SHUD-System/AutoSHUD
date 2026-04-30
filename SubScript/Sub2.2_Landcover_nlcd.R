@@ -17,7 +17,7 @@ att = att[att$INDEX %in% alc, ] # find the value only exist in the nlcd file.
 natt = nrow(att)
 rcl = cbind(att[, 1], 1:natt)
 lc.att = data.frame('ID'=1:natt, att[, -1])
-write.df(lc.att,  file = pd.att$landuse)
+write_df(lc.att,  file = pd.att$landuse)
 
 r2 = terra::classify(r1, rcl)
 terra::writeRaster(r2, filename = pd.pcs$lu.idx, overwrite = TRUE)

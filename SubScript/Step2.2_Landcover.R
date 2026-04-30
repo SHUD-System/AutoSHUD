@@ -17,7 +17,7 @@ system(cmds)
 system(cmds1)
 
 r = terra::rast(file.path(dir.predata, fns1))
-png.control(fn=paste0(fns1,'.png'), path = file.path(dir.png), ratio=1)
+png(filename = file.path(file.path(dir.png), paste0(fns1,'.png')), height = 7, width = 7, res = 300, unit = 'in')
 plot(r)
 plot(sf::st_geometry(wbd.buf), add=TRUE, axes=TRUE, lwd=2)
 plot(sf::st_geometry(wbd), add=TRUE, border=3, lwd=2)

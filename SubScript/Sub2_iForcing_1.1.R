@@ -16,4 +16,4 @@ vx = sf::st_as_sf(voronoipolygons(x, rw = rw, crs = sf::st_crs(x)))
 plot(sf::st_geometry(vx)); plot(sf::st_geometry(x), add = TRUE); plot(sf::st_geometry(ysp), add = TRUE)
 
 vx$ID = x$ID
-writeshape(vx, file = '/Users/leleshu/Dropbox/Project/2020_Heihe/shud/Data/Forcing')
+sf::st_write(vx, dsn = paste0('/Users/leleshu/Dropbox/Project/2020_Heihe/shud/Data/Forcing', ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)

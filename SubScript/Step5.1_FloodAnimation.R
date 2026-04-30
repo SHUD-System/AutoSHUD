@@ -7,7 +7,7 @@ source('GetReady.R')
 shud.evn(prjname = prjname, inpath = dir.pihmin, outpath = dir.pihmout)
 wbd = sf::st_read(file.path(dir.pihmgis, 'wbd.shp'), quiet = TRUE)
 crs.pcs = sf::st_crs(wbd)
-cfg.para = readpara()
+cfg.para = read_para()
 vns= c("eleysurf", "eleygw")
 xl=BasicPlot(varname = vns, plot=F, imap=F)
 
@@ -30,7 +30,7 @@ fx <- function(x, key, outdir=file.path(dir.pihmout, 'vis'),
   for(i in 1:nx){
     fn=paste0(cn[i], '.png')
     message(i,'/', nx, '\t', fn)
-    png.control(fn, path = outdir)
+    png(filename = file.path(outdir, fn), height = 7, width = 7, res = 300, unit = 'in')
     plot(xm[[i]])
     dev.off()
   }
