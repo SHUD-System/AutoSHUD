@@ -25,7 +25,7 @@ vns= c("eleysurf","eleyunsat","eleygw",
 # undebug(BasicPlot)
 xl=loaddata(varname = vns)
 stop()
-png(filename = file.path(pp$anapath, 'WaterBalance.png'), height = 7, width = 7, res = 300, unit = 'in')
+png(filename = file.path(pp$anapath, 'WaterBalance.png'), height = 7, width = 7, res = 300, units = 'in')
 wb=wb.all(xl=xl, apply.weekly, plot = T)
 dev.off()
 

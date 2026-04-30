@@ -89,7 +89,7 @@ Delineation <- function(CV,
   sf::st_write(spx, dsn = fsp.stm, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
   
   writelog(paste0('Plot watershed_delineation.png'), caller = caller)
-  png(filename = file.path(dir.fig, paste0('watershed_delineation.png')), height = 7, width = 7, res = 300, unit = 'in')
+  png(filename = file.path(dir.fig, paste0('watershed_delineation.png')), height = 7, width = 7, res = 300, units = 'in')
   plotr(fnr.dem)
   plotv(fsp.wbd, add = TRUE)
   plotv(fsp.outlets, add = TRUE, col = 'red', cex = 3)

@@ -30,7 +30,7 @@ plot(sf::st_geometry(buf.g), add=TRUE)
 vns = names(fid$var)
 vns = vns[! grepl('time', tolower(vns))] # don't need the time_bnds
 # =========PLOT===========================
-png(filename = file.path(xfg$dir$fig, paste0(prefix, '_LDAS_location.png')), height = 7, width = 7, res = 300, unit = 'in')
+png(filename = file.path(xfg$dir$fig, paste0(prefix, '_LDAS_location.png')), height = 7, width = 7, res = 300, units = 'in')
 plot(r * 0, col='gray', legend=FALSE)
 plot(r.sub * 0, col='red', legend=FALSE, add=TRUE)
 plot(sf::st_geometry(buf.g), add=TRUE)

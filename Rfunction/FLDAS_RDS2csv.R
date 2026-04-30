@@ -64,6 +64,6 @@ for(i in 1:nx){
     xmean = xmean + xl[[i]]
   }
 }
-png(filename = file.path(file.path(dir.png), paste0('Rawdata','_FLDAS_TS.png')), height = 7, width = 7, res = 300, unit = 'in')
+png(filename = file.path(dir.png, paste0('Rawdata','_FLDAS_TS.png')), height = 7, width = 7, res = 300, units = 'in')
 plot.zoo(xmean/nx, main='FLDAS')
 dev.off()

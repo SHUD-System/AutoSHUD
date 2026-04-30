@@ -30,7 +30,7 @@ fx <- function(x, key, outdir=file.path(dir.pihmout, 'vis'),
   for(i in 1:nx){
     fn=paste0(cn[i], '.png')
     message(i,'/', nx, '\t', fn)
-    png(filename = file.path(outdir, fn), height = 7, width = 7, res = 300, unit = 'in')
+    png(filename = file.path(outdir, fn), height = 7, width = 7, res = 300, units = 'in')
     plot(xm[[i]])
     dev.off()
   }

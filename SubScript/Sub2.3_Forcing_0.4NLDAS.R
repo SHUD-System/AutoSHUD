@@ -20,7 +20,7 @@ sp.ldas.pcs = sf::st_transform(sp.ldas, xfg$crs.pcs)
 sf::st_write(sp.ldas.pcs, dsn = pd.pcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 # writeshape(sp.ldas.pcs, file=file.path(dir.predata, 'LDAS'))
 
-png(filename = file.path(xfg$dir$fig, paste0(prefix, '_LDAS.png')), height = 7, width = 7, res = 300, unit = 'in')
+png(filename = file.path(xfg$dir$fig, paste0(prefix, '_LDAS.png')), height = 7, width = 7, res = 300, units = 'in')
 plot(sf::st_geometry(sp.fn), axes = TRUE); grid()
 plot(sf::st_geometry(sp.ldas), add = TRUE, col = 3)
 plot(sf::st_geometry(wb.g), add = TRUE, border = 2)

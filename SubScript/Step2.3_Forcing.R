@@ -30,7 +30,7 @@ sf::st_write(sp.ldas, dsn = paste0(file.path(dir.predata, 'LDAS_GCS'), ".shp"), 
 sp.ldas.pcs = sf::st_transform(sp.ldas, sf::st_crs(wbd.buf))
 sf::st_write(sp.ldas.pcs, dsn = paste0(file.path(dir.predata, 'LDAS'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
-png(filename = file.path(file.path(dir.png), paste0('Rawdata','_LDAS.png')), height = 7, width = 7, res = 300, unit = 'in')
+png(filename = file.path(dir.png, paste0('Rawdata','_LDAS.png')), height = 7, width = 7, res = 300, units = 'in')
 plot(sf::st_geometry(sp.fn), axes = TRUE); grid()
 plot(sf::st_geometry(sp.ldas), add = TRUE, col = 3)
 plot(sf::st_geometry(wbd.gcs), add = TRUE, border = 4, lwd = 2)

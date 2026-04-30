@@ -60,7 +60,7 @@ plot(pp)
 xm = xmean/nx
 saveRDS(xm, file.path(xfg$dir$forc, 'forc.mean.RDS'))
 
-png(filename = file.path(file.path(xfg$dir$fig), paste0('Rawdata','_CMIP6_TS.png')), height = 7, width = 7, res = 300, unit = 'in')
+png(filename = file.path(xfg$dir$fig, paste0('Rawdata','_CMIP6_TS.png')), height = 7, width = 7, res = 300, units = 'in')
 plot.zoo(xm, main='CMIP6')
 dev.off()
 plot.zoo(xm, main='CMIP6')

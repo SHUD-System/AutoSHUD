@@ -54,7 +54,7 @@ if(RIVERON){
 }
 # ==== PLOT FIGURE ================
 dem.p = terra::rast(pd.pcs$dem)
-png(filename = file.path(xfg$dir$fig, paste0(prefix, '_Rawdata_Elevation.png')), height = 7, width = 7, res = 300, unit = 'in')
+png(filename = file.path(xfg$dir$fig, paste0(prefix, '_Rawdata_Elevation.png')), height = 7, width = 7, res = 300, units = 'in')
 plot(dem.p)
 plot(sf::st_geometry(wb.p), add = TRUE, border = 2)
 if(RIVERON){

@@ -34,7 +34,7 @@ for(i in 1:nf){
   cm=cmds[i]
   message(i, '/', nc, '\t', fns1[i])
   r = terra::rast(ffns[i])
-  png(filename = file.path(file.path(dir.png,'Rawdata_Soil'), paste0(fns1[i],'.png')), height = 7, width = 7, res = 300, unit = 'in')
+  png(filename = file.path(dir.png, 'Rawdata_Soil', paste0(fns1[i],'.png')), height = 7, width = 7, res = 300, units = 'in')
   plot(r)
   plot(sf::st_geometry(wbd.buf), add=TRUE, axes=TRUE, lwd=2)
   plot(sf::st_geometry(wbd), add=TRUE, border=3, lwd=2)
