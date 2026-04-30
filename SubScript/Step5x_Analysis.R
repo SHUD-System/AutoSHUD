@@ -8,7 +8,7 @@ pp = shud.env(prjname = xfg$prjname, inpath = xfg$dir$modelin, outpath = xfg$dir
 ia=getArea(); AA = sum(ia)
 res=round(sqrt(mean(ia)), -2)
 ncell=length(ia)
-spm=sp.mesh2Shape()
+spm = sf::st_as_sf(sp.mesh2Shape())
 # rmask=shud.mask(cellsize = res)
 # spr=readriv.sp()
 oid=getOutlets()
@@ -40,7 +40,7 @@ gw=apply.daily(eleygw, mean)
 sn = apply.daily(eleysnow, sum)/ncell
 isn = apply(eleysnow, 2, mean)
 igw = apply(eleygw, 2, mean)
-spm@data=cbind(spm@data, 'isnow'=isn, igw=igw)
+spm = cbind(spm, isnow = isn, igw = igw)
 plot_sp(spm, 'isnow')
 plot_sp(spm, 'igw')
 plot(sn)
@@ -56,4 +56,3 @@ pq.h = cbind(p*1000, q[,oid]/AA*3*1000)
 gg=hydrograph(pq, ylabs = c('Prcp (mm/day)', 'Discharge (m3/day)' ) )
 gg
 ggsave('Hydrograph.png', gg)
-

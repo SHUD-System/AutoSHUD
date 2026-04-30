@@ -13,12 +13,12 @@ source('GetReady.R')
 # source('Rfunction/fun.LAIRL.R')
 # source('Rfunction/fun.Meteo.R')
 fin <- shud.filein(xfg$prjname, inpath = xfg$dir$modelin, outpath= xfg$dir$modelout)
-wbd=readOGR(pd.pcs$wbd)
-dem=raster(pd.pcs$dem)
-buf.g = readOGR(pd.pcs$wbd.buf)
+wbd = sf::st_read(pd.pcs$wbd, quiet = TRUE)
+dem = terra::rast(pd.pcs$dem)
+buf.g = sf::st_read(pd.pcs$wbd.buf, quiet = TRUE)
 
 # ==============================================
-AA1=gArea(wbd)
+AA1 = sum(as.numeric(sf::st_area(wbd)))
 a.max = min(AA1/xfg$para$NumCells, xfg$para$MaxArea)
 # a.max = max(a.max, AA1/18000); #' MaxNumber should be less than 18000
 
@@ -39,10 +39,10 @@ SS = AA1 / a.max
 
 #' ==============================================
 #' BUFFER
-wb.dis = rgeos::gUnionCascaded(wbd)
-wb.s1 = rgeos::gSimplify(wb.dis, tol=tol.wb, topologyPreserve = T)
+wb.dis = sf::st_union(wbd)
+wb.s1 = sf::st_as_sf(sf::st_simplify(wb.dis, dTolerance = tol.wb, preserveTopology = TRUE))
 # wb.s2 = sp.simplifyLen(wb.s1, tol.wb)
-wb.s2 = gSimplify(wb.s1, tol = tol.wb)
+wb.s2 = sf::st_simplify(wb.s1, dTolerance = tol.wb, preserveTopology = TRUE)
 wb.simp = wb.s2
 plot(wb.simp)
 
@@ -64,11 +64,11 @@ plot(tri, asp=1, type='n')
 
 # =========Mesh generation=====================================
 pm = shud.mesh(tri, dem=dem, AqDepth = xfg$para$AqDepth)
-spm = sp.mesh2Shape(pm, crs = crs(wbd))
-writeshape(spm, crs(wbd), file=file.path(fin['inpath'], 'gis', 'domain'))
-print(nrow(spm@data))
+spm = sf::st_as_sf(sp.mesh2Shape(pm, crs = sf::st_crs(wbd)))
+writeshape(spm, file = file.path(fin['inpath'], 'gis', 'domain'))
+print(nrow(spm))
 ia=getArea(pm)
-nCells = length(spm)
+nCells = nrow(spm)
 # generate SHUD .mesh 
 # undebug(shud.triangle)
 # xx=spTransform(readOGR('/Users/leleshu/CloudDrive/Experiment/Summit/cq/sub.shp'), crs(wb1))
@@ -86,23 +86,23 @@ nCells = length(spm)
 # plot(sort(ia))
 # stop()
 # ==============================================
-riv0=readOGR(pd.pcs$stm)
+riv0 = sf::st_read(pd.pcs$stm, quiet = TRUE)
 if(xfg$para$flowpath){
   # debug(sp.RiverPath)
-  riv1=sp.RiverPath(riv0)$sp  #Build the River Path --- Dissolve the lines.
-  riv1=riv0
-  riv2=rmDuplicatedLines(riv1)
+  riv1 = sf::st_as_sf(sp.RiverPath(riv0)$sp)  #Build the River Path --- Dissolve the lines.
+  riv1 = riv0
+  riv2 = sf::st_as_sf(rmDuplicatedLines(riv1))
 }else{
   riv1 = riv0
-  riv2=riv1
+  riv2 = riv1
 }
-lens=gLength(riv2, byid=TRUE)
+lens = as.numeric(sf::st_length(riv2))
 summary(lens)
-spr = sp.CutSptialLines(sl=riv2, tol=tol.rivlen)
+spr = sf::st_as_sf(sp.CutSptialLines(sl = riv2, tol = tol.rivlen))
 # writeshape(spr, file=file.path(xfg$dir$predata, 'spr'))
 go.png <- function(){
   png(file = file.path(xfg$dir$fig, 's3_data_0.png'), type=fig.type, height=11, width=11, res=100, unit='in')
-  plot(dem);  plot(wbd, add=T, border=2, lwd=2); plot(riv2, add=T, lwd=2, col=4); 
+  plot(dem);  plot(sf::st_geometry(wbd), add = TRUE, border = 2, lwd = 2); plot(sf::st_geometry(riv2), add = TRUE, lwd = 2, col = 4);
   plotlake()
   grid()
   dev.off()
@@ -110,24 +110,26 @@ go.png <- function(){
 # ======FORCING FILE======================
 if( xfg$iforcing < 1 ){
   if( xfg$iforcing < 0 ){
-    sp.forc=readOGR(pd.pcs$wbd.buf)
+    sp.forc = sf::st_read(pd.pcs$wbd.buf, quiet = TRUE)
   }else{
-    sp.forc=readOGR(pd.pcs$meteoCov)
+    sp.forc = sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
   }
   ID = paste0('X', (sp.forc$xcenter),
               'Y', (sp.forc$ycenter))
-  sp.c = SpatialPointsDataFrame(gCentroid(sp.forc, byid = TRUE), data=data.frame('ID' = ID), match.ID = FALSE)
-  sp.forc = ForcingCoverage(sp.meteoSite = sp.c, 
-                                   pcs=xfg$crs.pcs, gcs=xfg$crs.gcs, 
-                                   dem=dem, wbd=wbd)
+  sp.c = sf::st_centroid(sp.forc)
+  sp.c$ID = ID
+  sp.c = sp.c["ID"]
+  sp.forc = sf::st_as_sf(ForcingCoverage(sp.meteoSite = sp.c,
+                                         pcs = xfg$crs.pcs, gcs = xfg$crs.gcs,
+                                         dem = dem, wbd = wbd))
 }else{
-  sp.forc = rgdal::readOGR(xfg$fsp.forc)
-  sp.forc = rSHUD::ForcingCoverage(sp.meteoSite = sp.forc, 
-                                   pcs=xfg$crs.pcs, gcs=xfg$crs.gcs, 
-                                   dem=dem, wbd=wbd)
+  sp.forc = sf::st_read(xfg$fsp.forc, quiet = TRUE)
+  sp.forc = sf::st_as_sf(rSHUD::ForcingCoverage(sp.meteoSite = sp.forc,
+                                                pcs = xfg$crs.pcs, gcs = xfg$crs.gcs,
+                                                dem = dem, wbd = wbd))
 }
 
-write.forc(sp.forc@data, path = xfg$dir$forc,
+write.forc(sf::st_drop_geometry(sp.forc), path = xfg$dir$forc,
            startdate = paste0(min(years), '0101'), 
            file=fin['md.forc'])
 
@@ -135,10 +137,10 @@ write.forc(sp.forc@data, path = xfg$dir$forc,
 go.png <-function(){
   png(file = file.path(xfg$dir$fig, 's3_predata_data.png'), type=fig.type, height=11, width=11, res=100, unit='in')
   plot(dem);grid()
-  plot(buf.g, add=T, axes=T, lwd=2)
-  plot(wbd, add=T, border=3, lwd=2)
-  plot(riv2, add=T, col=2, lwd=2)
-  plot(sp.forc, add=T, lwd=0.5, lty=2)
+  plot(sf::st_geometry(buf.g), add = TRUE, axes = TRUE, lwd = 2)
+  plot(sf::st_geometry(wbd), add = TRUE, border = 3, lwd = 2)
+  plot(sf::st_geometry(riv2), add = TRUE, col = 2, lwd = 2)
+  plot(sf::st_geometry(sp.forc), add = TRUE, lwd = 0.5, lty = 2)
   plotlake()
   grid()
   title('DEM-WBD-RIV')
@@ -154,8 +156,8 @@ dir.create(gisout, showWarnings = F, recursive = T)
 # ====== RIVER ======================
 go.png <-function(){
   png(file = file.path(xfg$dir$fig, 's3_data_1.png'), type=fig.type, height=11, width=11, res=100, unit='in')
-  plot(dem); plot(wb.s2, add=T, border=2, lwd=2); 
-  plot(spr, add=T, lwd=2, col=4)  
+  plot(dem); plot(sf::st_geometry(wb.s2), add = TRUE, border = 2, lwd = 2);
+  plot(sf::st_geometry(spr), add = TRUE, lwd = 2, col = 4)
   plotlake()
   grid()
   dev.off()
@@ -172,11 +174,11 @@ go.png <-function(){
 }; go.png()
 
 # ======LANDUSE======================
-r.lc = raster(pd.pcs$lu.r)
+r.lc = terra::rast(pd.pcs$lu.r)
 if(xfg$ilanduse==0.1){
   rlc.idx = r.lc+1  
 }else{
-  rlc.idx = raster(pd.pcs$lu.idx)  
+  rlc.idx = terra::rast(pd.pcs$lu.idx)
 }
 
 
@@ -186,23 +188,23 @@ if(xfg$para$QuickMode){
   message('\n !!! QUICK MODE in SOIL/GEOL!!!\n')
   pa=shud.att(tri, r.soil = 1, r.geol = 1, r.lc = rlc.idx, r.forc = 1, r.BC = 0, sp.lake = sp.lake)
 }else{
-  r.soil = raster(pd.pcs$soil.r)
-  r.geol = raster(pd.pcs$geol.r)
+  r.soil = terra::rast(pd.pcs$soil.r)
+  r.geol = terra::rast(pd.pcs$geol.r)
   pa=shud.att(tri, r.soil = r.soil, r.geol = r.geol, r.lc = rlc.idx, r.forc = sp.forc, r.BC = 0, sp.lake = sp.lake)
 }
 fx <- function(x){ x[is.na(x)] = median(x, na.rm = TRUE); return(x) }
 pa = apply(pa, 2, fx)
 
-spm@data = cbind(spm@data, pa)
-writeshape(spm, crs(wbd), file=file.path(fin['inpath'], 'gis', 'domain'))
+spm = cbind(spm, as.data.frame(pa))
+writeshape(spm, file = file.path(fin['inpath'], 'gis', 'domain'))
 
 # ====== generate  .riv ======================
 pr=shud.river(spr, dem)
 pr@rivertype$Width= pr@rivertype$Width * xfg$para$RivWidth
 pr@rivertype$Depth= xfg$para$RivDepth + (1:nrow(pr@rivertype) - 1 )*0.5
 pr@rivertype$BankSlope = 1
-spr@data = data.frame(pr@river, pr@rivertype[pr@river$Type,])
-writeshape(spr, crs(wbd), file=file.path(gisout, 'river'))
+spr = cbind(spr, data.frame(pr@river, pr@rivertype[pr@river$Type, ]))
+writeshape(spr, file = file.path(gisout, 'river'))
 
 # Cut the rivers with triangles
 nspr=nrow(spr)
@@ -210,17 +212,17 @@ if(nspr > 10000){
   for(i in 1:nspr){
     message(i, '/', nspr)
     ispr = spr[i, ]
-    iseg = sp.RiverSeg(spm, ispr)
+    iseg = sf::st_as_sf(sp.RiverSeg(spm, ispr))
     if(i<=1){
-      sp.seg=iseg
+      sp.seg = iseg
     }else{
-      sp.seg=c(sp.seg, iseg)
+      sp.seg = rbind(sp.seg, iseg)
     }
   }
 }else{
-  sp.seg=sp.RiverSeg(spm, spr)
+  sp.seg = sf::st_as_sf(sp.RiverSeg(spm, spr))
 }
-writeshape(sp.seg, crs(wbd), file=file.path(gisout, 'seg'))
+writeshape(sp.seg, file = file.path(gisout, 'seg'))
 
 # Generate the River segments table
 prs = shud.rivseg(sp.seg)
@@ -236,7 +238,7 @@ pic = shud.ic(ncell = nrow(pm@mesh), nriv = nrow(pr@river), lakestage=lakestage,
               AqD = xfg$para$AqDepth)
 
 # Generate shapefile of mesh domain
-sp.dm = sp.mesh2Shape(pm)
+sp.dm = sf::st_as_sf(sp.mesh2Shape(pm))
 # model configuration, parameter
 cfg.para = shud.para(nday = nday)
 cfg.para['INIT_MODE']=3
@@ -267,7 +269,7 @@ if(xfg$para$QuickMode){
 
 # ======LANDUSE======================
 
-alc = sort(unique(r.lc))
+alc = sort(stats::na.omit(unique(terra::values(r.lc))))
 
 if(xfg$ilanduse == 0.1){
   # undebug(read.df)
@@ -276,8 +278,8 @@ if(xfg$ilanduse == 0.1){
 if(xfg$ilanduse == 0.1){
   lr = LaiRf.GLC(years=(min(years):(max(years))+30) )
 }else{
-  r.lc = raster(pd.pcs$lu.r)
-  rlc.idx = raster(pd.pcs$lu.idx)
+  r.lc = terra::rast(pd.pcs$lu.r)
+  rlc.idx = terra::rast(pd.pcs$lu.idx)
   message('NON GLC landuse. 需要更新代码')
   stop()
 }
@@ -342,4 +344,3 @@ message('NCell= ', nCells, '\t Area = ', round(AA)/1e6,
 ra=RiverAtt()
 message('Nriv= ', nrow(ra), '\t Length = ', round(sum(ra$Length))/1e3, 'km',
         '\n\t rivLen_mean=', mean(ra$Length)/1e3, 'km')
-

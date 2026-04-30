@@ -7,7 +7,7 @@ cut_HWSD <- function(fn.r,
                      fa.soil, 
                      fa.geol,
                      crs.out){
-  crs.gcs = sp::CRS('+init=epsg:4326')
+  crs.gcs = sf::st_crs(4326)
   # cmd=paste('gdalwarp -overwrite -cutline', 
   #           fn.buf, 
   #           '-dstnodata -9999',
@@ -19,8 +19,8 @@ cut_HWSD <- function(fn.r,
   # system(cmd)
   fun.gdalcut(f.in = fn.r, f.mask = fn.buf, f.out = fout.mask,
               s_srs = crs.gcs, t_srs = crs.out)
-  r = raster::raster(fout.mask)
-  ur=sort(raster::unique(r))
+  r = terra::rast(fout.mask)
+  ur = sort(stats::na.omit(unique(terra::values(r))))
   x = foreign::read.dbf(fn.dbf)
   
   cn =  c('SILT', 'CLAY', 'OC', 'BULK_DEN')
@@ -29,9 +29,8 @@ cut_HWSD <- function(fn.r,
   idx = x[, 1] %in% ur
   y.soil = x[idx,  c('ID', cn.t)]
   y.geol = x[idx,   c('ID', cn.s)]
-  fn1 = fn2 = fout.mask
-  raster::extension(fn1) ='.Soil.csv'
-  raster::extension(fn2) ='.Geol.csv'
+  fn1 = sub("\\.[^.]+$", ".Soil.csv", fout.mask)
+  fn2 = sub("\\.[^.]+$", ".Geol.csv", fout.mask)
   write.table(y.soil, file = fn1, quote = FALSE, row.names = FALSE, col.names = TRUE)
   write.table(y.geol, file = fn2, quote = FALSE, row.names = FALSE, col.names = TRUE)
   # foreign::write.dbf(y.geol, file = fn2)

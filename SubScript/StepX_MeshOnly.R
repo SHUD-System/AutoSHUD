@@ -3,62 +3,62 @@ source('GetReady.R')
 RIVERON = FALSE
 prefix ='S1'
 # ================= boundary =================
-wbd0 = readOGR(xfg$fsp.wbd)  # Read data
-wbd0 = gBuffer(wbd0, width=0) # Remove error from irregular polygon.
+wbd0 = sf::st_read(xfg$fsp.wbd, quiet = TRUE)  # Read data
+wbd0 = sf::st_make_valid(sf::st_buffer(wbd0, dist = 0)) # Remove error from irregular polygon.
 # ---- disolve ----
-wbd.dis = removeholes(gUnaryUnion(wbd0))
+wbd.dis = sf::st_as_sf(terra::fillHoles(terra::vect(sf::st_union(wbd0))))
 
 # wbd in pcs
-wb.p = spTransform(wbd0, xfg$crs.pcs) 
-writeshape(wb.p, pd.pcs$wbd)
+wb.p = sf::st_transform(wbd0, xfg$crs.pcs)
+writeshape(wb.p, file = pd.pcs$wbd)
 
 # buffer of wbd in pcs
-buf.p = gBuffer(wb.p, width = xfg$para$DistBuffer) 
-writeshape(buf.p, pd.pcs$wbd.buf)
+buf.p = sf::st_buffer(wb.p, dist = xfg$para$DistBuffer)
+writeshape(buf.p, file = pd.pcs$wbd.buf)
 
-buf.g = spTransform(buf.p, xfg$crs.gcs)
-writeshape(buf.g, pd.gcs$wbd.buf)
+buf.g = sf::st_transform(buf.p, xfg$crs.gcs)
+writeshape(buf.g, file = pd.gcs$wbd.buf)
 
-wb.g=spTransform(wb.p, CRSobj = xfg$crs.gcs )
-writeshape(wb.g, pd.gcs$wbd)
+wb.g = sf::st_transform(wb.p, xfg$crs.gcs)
+writeshape(wb.g, file = pd.gcs$wbd)
 
 
 # ================= DEM =================
-dem0=raster(xfg$fr.dem)
+dem0 = terra::rast(xfg$fr.dem)
 # -------CROP DEM -----------------
 # Crop the dem AND conver the dem to PCS.
-fun.gdalwarp(f1=xfg$fr.dem, f2=pd.pcs$dem, t_srs = xfg$crs.pcs, s_srs = crs(dem0), 
+fun.gdalwarp(f1=xfg$fr.dem, f2=pd.pcs$dem, t_srs = xfg$crs.pcs, s_srs = terra::crs(dem0), 
              opt = paste0('-cutline ', pd.pcs$wbd.buf) )
 # Crop the dem, output is in GCS
-fun.gdalwarp(f1=xfg$fr.dem, f2=pd.gcs$dem, t_srs = xfg$crs.gcs, s_srs = crs(dem0), 
+fun.gdalwarp(f1=xfg$fr.dem, f2=pd.gcs$dem, t_srs = xfg$crs.gcs, s_srs = terra::crs(dem0), 
              opt = paste0('-cutline ', pd.pcs$wbd.buf) )
 
 if(RIVERON){
   # =========Stream Network===========================
-  stm0 = readOGR(xfg$fsp.stm)  # data 0: raw data
-  stm1 = spTransform(stm0, xfg$crs.pcs)  # data 1: PCS
+  stm0 = sf::st_read(xfg$fsp.stm, quiet = TRUE)  # data 0: raw data
+  stm1 = sf::st_transform(stm0, xfg$crs.pcs)  # data 1: PCS
   fun.simplifyRiver <- function(){
-    riv.xy = extractCoords(stm1)
+    riv.xy = sf::st_coordinates(stm1)
     npoint = nrow(riv.xy)
-    mlen = gLength(stm1) / npoint
-    r.dem = raster(pd.pcs$dem)
-    dx = mean(res(r.dem))
+    mlen = sum(as.numeric(sf::st_length(stm1))) / npoint
+    r.dem = terra::rast(pd.pcs$dem)
+    dx = mean(terra::res(r.dem))
     if( mlen < dx){
-      stm1 = gSimplify(stm1, tol = dx)
+      stm1 = sf::st_simplify(stm1, dTolerance = dx, preserveTopology = TRUE)
     }
     stm1
   }
   stm1 = fun.simplifyRiver()
-  stm.p= sp.RiverPath(stm1)$sp  # clean data with flowpath.
-  writeshape(stm.p, file=pd.pcs$stm)
+  stm.p = sf::st_as_sf(sp.RiverPath(stm1)$sp)  # clean data with flowpath.
+  writeshape(stm.p, file = pd.pcs$stm)
 }
 # ==== PLOT FIGURE ================
-dem.p = raster(pd.pcs$dem)
+dem.p = terra::rast(pd.pcs$dem)
 png.control(fn=paste0(prefix, '_Rawdata_Elevation.png'), path = xfg$dir$fig, ratio = 1)
 plot(dem.p)
-plot(wb.p, add=T, border=2)
+plot(sf::st_geometry(wb.p), add = TRUE, border = 2)
 if(RIVERON){
-  plot(stm.p, add=T, col=4)
+  plot(sf::st_geometry(stm.p), add = TRUE, col = 4)
 }
 dev.off()
 
@@ -67,15 +67,15 @@ fin <- shud.filein(xfg$prjname,
 # x=list.files(xfg$dir$modelin, pattern = glob2rx(paste0(prjname, '.*.*')), full.names = T)
 # file.remove(x)
 
-wbd=readOGR(pd.pcs$wbd)
+wbd = sf::st_read(pd.pcs$wbd, quiet = TRUE)
 if(RIVERON){
-riv=readOGR(pd.pcs$stm)
+riv = sf::st_read(pd.pcs$stm, quiet = TRUE)
 }
-dem=raster(pd.pcs$dem)
-buf.g = readOGR(pd.pcs$wbd.buf)
+dem = terra::rast(pd.pcs$dem)
+buf.g = sf::st_read(pd.pcs$wbd.buf, quiet = TRUE)
 
 # ==============================================
-AA1=gArea(wbd)
+AA1 = sum(as.numeric(sf::st_area(wbd)))
 
 a.max = min(AA1/xfg$para$NumCells, xfg$para$AreaMax);
 q.min = 33;
@@ -93,8 +93,8 @@ nday = 365*ny + round(ny/4) - 1
 # ==============================================
 
 
-wb.dis = rgeos::gUnionCascaded(wbd)
-wb.s1 = rgeos::gSimplify(wb.dis, tol=tol.wb, topologyPreserve = T)
+wb.dis = sf::st_union(wbd)
+wb.s1 = sf::st_as_sf(sf::st_simplify(wb.dis, dTolerance = tol.wb, preserveTopology = TRUE))
 wb.s2 = sp.simplifyLen(wb.s1, tol.wb)
 wb.simp = wb.s2
 plot(wb.simp)
@@ -102,7 +102,6 @@ plot(wb.simp)
 tri = shud.triangle(wb=wb.simp,q=q.min, a=a.max)
 plot(tri, asp=1, type='n')
 pm=shud.mesh(tri,dem=dem, AqDepth = xfg$para$AqDepth)
-spm = sp.mesh2Shape(pm, crs = crs(wbd))
-writeshape(spm, crs(wbd), file=file.path(fin['inpath'], 'gis', 'domain'))
-print(nrow(spm@data))
-
+spm = sf::st_as_sf(sp.mesh2Shape(pm, crs = sf::st_crs(wbd)))
+writeshape(spm, file = file.path(fin['inpath'], 'gis', 'domain'))
+print(nrow(spm))

@@ -1,6 +1,6 @@
 library(ncdf4)
 ext.nc = c(70, 140, 15, 55)
-buf.g = readOGR(pd.gcs$wbd.buf)
+buf.g = sf::st_read(pd.gcs$wbd.buf, quiet = TRUE)
 # ext = extent(buf.g)
 
 dx=dy = 0.1
@@ -8,13 +8,13 @@ xx = seq(ext.nc[1]+dx/2, ext.nc[2]-dx/2, by=dx)
 yy = seq(ext.nc[3]+dy/2, ext.nc[4]-dy/2, by=dy)
 
 nx=length(xx); ny=length(yy)
-r = xyz2Raster(x=xx, y=yy, arr = matrix(1:(nx*ny), nx, ny))
-crs(r) = crs(buf.g)
+r = terra::rast(xyz2Raster(x = xx, y = yy, arr = matrix(1:(nx * ny), nx, ny)))
+terra::crs(r) = sf::st_crs(buf.g)$wkt
 # plot(r)
-rm=crop(r, buf.g)
+rm = terra::crop(r, terra::vect(buf.g))
 # plot(rm); plot(buf.g, add=T)
 
-idx=sort(unique(rm[]))
+idx = sort(stats::na.omit(unique(terra::values(rm))))
 id.x = floor(idx / nx)
 id.y = idx - id.x * nx
 id.x
@@ -53,17 +53,17 @@ if(is.null(sp.ldas)){
   png.control(fn=paste0(prefix, '_LDAS_location.png'), path = xfg$dir$fig, ratio=1)
   plot(r * 0, col='gray', legend=FALSE)
   plot(r.sub * 0, col='red', legend=FALSE, add=TRUE)
-  plot(buf.g, add=T)
+  plot(sf::st_geometry(buf.g), add = TRUE)
   dev.off()
   
   # =========Get the data===========================
-  sp0.gcs = spTransform(sp.ldas, xfg$crs.gcs)
-  sp0.pcs = spTransform(sp.ldas, xfg$crs.pcs)
+  sp0.gcs = sf::st_transform(sp.ldas, xfg$crs.gcs)
+  sp0.pcs = sf::st_transform(sp.ldas, xfg$crs.pcs)
 }
-id=which(gIntersects(sp0.gcs, buf.g, byid = T)) 
+id = which(lengths(sf::st_intersects(sp0.gcs, buf.g)) > 0)
 writeshape(sp0.gcs[id, ], file = pd.gcs$meteoCov)
 writeshape(sp0.pcs[id, ], file = pd.pcs$meteoCov)
-sitenames = paste0('X', sp0.gcs@data$xcenter, 'Y', sp0.gcs@data$ycenter)
+sitenames = paste0('X', sp0.gcs$xcenter, 'Y', sp0.gcs$ycenter)
 sitenames=sitenames[id]
 
 # plot(sp0.gcs)

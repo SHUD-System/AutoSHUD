@@ -1,30 +1,30 @@
-buf.g = readOGR(pd.gcs$wbd.buf)
-wb.g = readOGR(pd.gcs$wbd)
+buf.g = sf::st_read(pd.gcs$wbd.buf, quiet = TRUE)
+wb.g = sf::st_read(pd.gcs$wbd, quiet = TRUE)
 
 if(xfg$iforcing == 0.3){ res = 0.25 }
 if(xfg$iforcing == 0.4){ res = 0.125 }
-ext = extent(buf.g)
+ext = terra::ext(terra::vect(buf.g))
 
-ext.fn = c(floor(ext[1]), ceiling(ext[2]), floor(ext[3]), ceiling(ext[4]) )
+ext.fn = c(floor(ext$xmin), ceiling(ext$xmax), floor(ext$ymin), ceiling(ext$ymax))
 
-sp.fn =fishnet(xx = seq(ext.fn[1], ext.fn[2], by=res),
-               yy = seq(ext.fn[3], ext.fn[4], by=res),
-               crs =crs(buf.g), type='polygon')
-id=which(gIntersects(sp.fn, buf.g, byid = T))
+sp.fn = sf::st_as_sf(fishnet(xx = seq(ext.fn[1], ext.fn[2], by = res),
+                             yy = seq(ext.fn[3], ext.fn[4], by = res),
+                             crs = sf::st_crs(buf.g), type = 'polygon'))
+id = which(lengths(sf::st_intersects(sp.fn, buf.g)) > 0)
 sp.ldas = sp.fn[id,]
-plot(sp.ldas); plot(add=T, buf.g, border=3); plot(add=T, wb.g, border=2)
+plot(sf::st_geometry(sp.ldas)); plot(sf::st_geometry(buf.g), add = TRUE, border = 3); plot(sf::st_geometry(wb.g), add = TRUE, border = 2)
 # writeshape(sp.ldas, file=file.path(dir.predata, 'LDAS_GCS'))
-writeshape(sp.ldas, file=pd.gcs$meteoCov)
+writeshape(sp.ldas, file = pd.gcs$meteoCov)
 
-sp.ldas.pcs = spTransform(sp.ldas, xfg$crs.pcs)
-writeshape(sp.ldas.pcs, file=pd.pcs$meteoCov)
+sp.ldas.pcs = sf::st_transform(sp.ldas, xfg$crs.pcs)
+writeshape(sp.ldas.pcs, file = pd.pcs$meteoCov)
 # writeshape(sp.ldas.pcs, file=file.path(dir.predata, 'LDAS'))
 
 png.control(fn=paste0(prefix, '_LDAS.png'), path = xfg$dir$fig, ratio=1)
-plot(sp.fn, axes=T); grid()
-plot(sp.ldas, add=T, col=3)
-plot(wb.g, add=T, border=2)
-plot(buf.g, add=T, border=4)
+plot(sf::st_geometry(sp.fn), axes = TRUE); grid()
+plot(sf::st_geometry(sp.ldas), add = TRUE, col = 3)
+plot(sf::st_geometry(wb.g), add = TRUE, border = 2)
+plot(sf::st_geometry(buf.g), add = TRUE, border = 4)
 title('LDAS')
 dev.off()
 
@@ -36,8 +36,8 @@ dev.off()
 
 if ( xfg$iforcing == 0.1 ) {  # FLDAS
   message('USING FLDAS FORCING DATA')
-  source('Rfunction/CLDAS_nc2RDS.R') # read the orginal fldas data and save to .RDS file.
-  source('Rfunction/CLDAS_RDS2csv.R') # read the RDS above, to save as .csv file.
+  if(file.exists('Rfunction/CLDAS_nc2RDS.R')) source('Rfunction/CLDAS_nc2RDS.R') # read the orginal fldas data and save to .RDS file.
+  if(file.exists('Rfunction/CLDAS_RDS2csv.R')) source('Rfunction/CLDAS_RDS2csv.R') # read the RDS above, to save as .csv file.
 }else if ( xfg$iforcing == 0.2 ) {  # FLDAS
   message('USING FLDAS FORCING DATA')
   source('Rfunction/FLDAS_nc2RDS.R') # read the orginal fldas data and save to .RDS file.

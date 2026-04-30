@@ -5,8 +5,8 @@
 # 
 source('GetReady.R')
 shud.evn(prjname = prjname, inpath = dir.pihmin, outpath = dir.pihmout)
-wbd=readOGR(file.path(dir.pihmgis, 'wbd.shp'))
-crs.pcs = crs(wbd)
+wbd = sf::st_read(file.path(dir.pihmgis, 'wbd.shp'), quiet = TRUE)
+crs.pcs = sf::st_crs(wbd)
 cfg.para = readpara()
 vns= c("eleysurf", "eleygw")
 xl=BasicPlot(varname = vns, plot=F, imap=F)
@@ -23,7 +23,7 @@ fx <- function(x, key, outdir=file.path(dir.pihmout, 'vis'),
   # cellStats(rs, range)
   xm=rs;
   # xm[xm<0.05]=0
-  writeRaster(xm, file.path(outdir, paste0(key, '.tif')), stack=T, overwrite=T)
+  terra::writeRaster(xm, file.path(outdir, paste0(key, '.tif')), overwrite = TRUE)
   
   nx=dim(xm)[3]
   

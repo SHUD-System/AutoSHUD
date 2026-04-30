@@ -40,8 +40,8 @@ fun.gdalcut(f.in = xfg$ldas$tif,
             t_srs = xfg$crs.gcs,
             f.out = pd.gcs$meteoTif)
 
-r = raster::raster(pd.gcs$meteoTif)
-ux = sort(cellStats(r, unique))
+r = terra::rast(pd.gcs$meteoTif)
+ux = sort(stats::na.omit(unique(terra::values(r))))
 nx=length(ux)
 df=read.table(file=xfg$ldas$att, sep=',', header = TRUE)
 subdf = df[ux, ]
@@ -51,18 +51,18 @@ plot.ldas <- function(key='LDAS',fnr, sp.wbd=NULL, sp.riv=NULL){
   par(mar=c(2, 2, 1, 1) )
   # cols=sample(colorspace::rainbow_hcl(n=nx*10), nx)
   # raster::plot(r, axes=TRUE, breaks=ux, col=cols); 
-  raster::plot(r, axes=TRUE, legend=FALSE); 
-  dx=mean(res(r), na.rm=TRUE)
+  plot(r, axes = TRUE, legend = FALSE)
+  dx = mean(terra::res(r), na.rm = TRUE)
   points(x=subdf[, 'LON'], y=subdf[, 'LAT'], col='darkblue', pch=1, cex=0.25)
   text(x=subdf[, 'LON'], y=subdf[, 'LAT'] + dx/6, subdf[, 'LON'], col='blue', cex=0.25)
   text(x=subdf[, 'LON'], y=subdf[, 'LAT'] - dx/6, subdf[, 'LAT'], col='blue', cex=0.25)
-  if(!is.null(sp.wbd)){ raster::plot(sp.wbd, add=TRUE, border='red')  }
-  if(!is.null(sp.riv)){ raster::plot(sp.riv, add=TRUE, border='blue')  }
+  if(!is.null(sp.wbd)){ plot(sf::st_geometry(sf::st_as_sf(sp.wbd)), add = TRUE, border = 'red') }
+  if(!is.null(sp.riv)){ plot(sf::st_geometry(sf::st_as_sf(sp.riv)), add = TRUE, border = 'blue') }
   mtext(side=3, line=-1, text=paste(key, paste0('(N =', nx, ')')) )
   grid()
   dev.off()
 }
-plot.ldas(key='LDAS', fnr=pd.gcs$meteoTif, sp.wbd=readOGR(pd.gcs$wbd.buf))
+plot.ldas(key='LDAS', fnr = pd.gcs$meteoTif, sp.wbd = sf::st_read(pd.gcs$wbd.buf, quiet = TRUE))
 
 # =================================================
 # ======= 5. get FORCING TSD  ==========
@@ -77,4 +77,3 @@ LDAS.funs <- list(
 )
 ldasfun <- LDAS.funs[[tolower(xfg$meteorological_data)]]
 ldasfun(xfg=xfg, fns = fns)
-

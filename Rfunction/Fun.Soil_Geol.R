@@ -3,11 +3,6 @@
 fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE, 
                           outdir,  col_ID = 2:5){
   msg = 'fun.Soil_Geol:: '
-  
-  # Ensure terra package is not interfering
-  if("terra" %in% (.packages())){
-    detach("package:terra", unload=TRUE)
-  }
   if(!file.exists(fn.r)){
     message(msg, 'Raster file is missing: ', fn.r)
     stop('STOP WITH ERROR.')
@@ -18,12 +13,7 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
   }
   
   if(file.exists(fn.r)){
-    # Force use of raster package function explicitly
-    r <- raster::raster(fn.r)
-    # Ensure it's a RasterLayer object
-    if(!inherits(r, "RasterLayer")) {
-      stop(paste(msg, "Failed to create RasterLayer from", fn.r))
-    }
+    r <- terra::rast(fn.r)
   }else{
     message(msg, 'File does not exist or empty: ', fn.r)
     stop(paste(msg, 'Exit with error in '))
@@ -32,9 +22,9 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
   # x=foreign::read.dbf(fn.tab)
   x=read.table(file=fn.tab, header = TRUE)
   
-  ur <- sort(raster::unique(r))
+  ur <- sort(stats::na.omit(unique(terra::values(r))))
   nr <- length(ur)
-  r1 <- raster::reclassify(r, cbind(ur, 1:nr))
+  r1 <- terra::classify(r, cbind(ur, 1:nr))
   
   idx = which(x[, 1] %in% ur)
   
@@ -69,22 +59,17 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
   }
   
   write.df(texture, file=fatt)
-  # Check if projection is needed
-  current_crs <- raster::crs(r1)
+  current_crs <- sf::st_crs(terra::crs(r1))
   target_crs <- xfg$crs.pcs
   
-  if(identical(current_crs, target_crs) || 
-     (!is.na(current_crs) && !is.na(target_crs) && 
-      raster::compareCRS(current_crs, target_crs))) {
-    # CRS are the same, no projection needed
+  if(identical(current_crs$wkt, sf::st_crs(target_crs)$wkt)) {
     r2 <- r1
     message(msg, "CRS are identical, skipping projection")
   } else {
-    # Project to target CRS
-    r2 <- raster::projectRaster(r1, crs=target_crs)
+    r2 <- terra::project(r1, target_crs)
   }
-  raster::writeRaster(r1, filename = fp, overwrite=TRUE)
-  raster::writeRaster(r2, filename = fg, overwrite=TRUE)
+  terra::writeRaster(r1, filename = fp, overwrite=TRUE)
+  terra::writeRaster(r2, filename = fg, overwrite=TRUE)
   texture[is.na(texture) | is.nan(texture)] = -9999
   message(msg, 'Texture: ')
   print(apply(texture, 2, summary))
@@ -99,4 +84,3 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
 
 # dat.soil = fun.Soil_Geol(xfg$fn.soil, xfg$tab.soil)
 # dat.geol = fun.Soil_Geol(xfg$fn.geol, xfg$tab.geol)
-

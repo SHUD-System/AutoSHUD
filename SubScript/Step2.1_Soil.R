@@ -16,7 +16,7 @@ cmds=paste('gdalwarp -overwrite -q -cutline',
            file.path(d0, fns), file.path(d1, fns) )
 cmds1=paste('gdalwarp -overwrite -dstnodata -9 -q',
             '-t_srs', paste0("'epsg:4326'"),
-            '-t_srs', paste0("'", crs(wbd), "'"),
+            '-t_srs', paste0("'", sf::st_crs(wbd)$wkt, "'"),
             file.path(d1, fns), file.path(d1, fns1) )
 cmds
 nc=length(cmds)
@@ -32,7 +32,7 @@ nf=length(ffns)
 for(i in 1:nf){
   cm=cmds[i]
   message(i, '/', nc, '\t', fns1[i])
-  r=raster(ffns[i])
+  r = terra::rast(ffns[i])
   png.control(fn=paste0(fns1[i],'.png'), path = file.path(dir.png,'Rawdata_Soil'), ratio=1)
   plot(r)
   plot(wbd.buf, add=T, axes=T, lwd=2)
@@ -54,12 +54,12 @@ do.SoilGeology <- function(lyr, indir, vns= c('SLT', 'CLY', 'ORCDRC', 'BLD')){
   for(i in 1:nv){
     message(i,'/', nv, '\t', vns[i])
     pattern=glob2rx(paste0(vns[i], '*', lyr, '*PCS.tif'))
-    r = raster(list.files(indir, pattern = pattern,full.names = TRUE) )
+    r = terra::rast(list.files(indir, pattern = pattern, full.names = TRUE))
     if(i==1){
       rc = r
-      res(rc)=res(r)*5
-      extent(rc)=extent(r)
-      rc[]=1
+      terra::res(rc) = terra::res(r) * 5
+      terra::ext(rc) = terra::ext(r)
+      rc[] = 1
     }
     if(i==3){#Pribyl, D. W. (2010). A critical review of the conventional SOC to SOM conversion factor. GCSderma, 156(3–4), 75–83. https://doi.org/10.1016/j.GCSderma.2010.02.003
       r = r /10/0.58;
@@ -67,8 +67,8 @@ do.SoilGeology <- function(lyr, indir, vns= c('SLT', 'CLY', 'ORCDRC', 'BLD')){
     if(i==4){ # kg/m3 = g/cm3
       r = r / 1000
     }
-    rr=resample(r, rc)
-    rl[[i]] =rr
+    rr = terra::resample(r, rc)
+    rl[[i]] = rr
   }
   names(rl) = vns
   saveRDS(rl, file.path(dir.predata, paste0('Soil_', lyr, '.RDS')))

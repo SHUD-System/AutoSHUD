@@ -79,10 +79,8 @@ pd.att <- list(
   )
 
 
-library(raster)
-library(sp)
-library(rgeos)
-library(rgdal)
+library(terra)
+library(sf)
 library(rSHUD)
 library(lattice)
 library(ggplot2)
@@ -90,23 +88,4 @@ library(ggplot2)
 library(hydroTSM)
 library(hydroGOF)
 library(xts)
-
-# Ensure terra package is detached if loaded to avoid conflicts
-if("terra" %in% (.packages())){
-  detach("package:terra", unload=TRUE)
-}
-
-# Force clean namespace for spatial packages
-if("package:terra" %in% search()) {
-  detach("package:terra", unload=TRUE, force=TRUE)
-}
-
-# Explicitly mask terra functions if they exist
-if("package:terra" %in% search() && exists("raster", where="package:terra")) {
-  raster <- raster::raster
-  unique <- raster::unique
-  reclassify <- raster::reclassify
-  projectRaster <- raster::projectRaster
-  writeRaster <- raster::writeRaster
-}
 fig.type='cairo'

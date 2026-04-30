@@ -15,24 +15,24 @@ rm(list=ls())
 source('GetReady.R')
 prefix ='S1'
 # ================= Boundary =================
-wbd0 = readOGR(xfg$fsp.wbd)  # Read data
-wbd0 = gBuffer(wbd0, width=0) # Remove error from irregular polygon.
+wbd0 = sf::st_read(xfg$fsp.wbd, quiet = TRUE)  # Read data
+wbd0 = sf::st_make_valid(sf::st_buffer(wbd0, dist = 0)) # Remove error from irregular polygon.
 # ---- disolve ----
-wbd.dis = removeholes(gUnaryUnion(wbd0))
+wbd.dis = sf::st_as_sf(terra::fillHoles(terra::vect(sf::st_union(wbd0))))
 
 # wbd in pcs
-wb.p = spTransform(wbd0, xfg$crs.pcs) 
-writeshape(wb.p, pd.pcs$wbd)
+wb.p = sf::st_transform(wbd0, xfg$crs.pcs)
+writeshape(wb.p, file = pd.pcs$wbd)
 
 # buffer of wbd in pcs
-buf.p = gBuffer(wb.p, width = xfg$para$DistBuffer) 
-writeshape(buf.p, pd.pcs$wbd.buf)
+buf.p = sf::st_buffer(wb.p, dist = xfg$para$DistBuffer)
+writeshape(buf.p, file = pd.pcs$wbd.buf)
 
-buf.g = spTransform(buf.p, xfg$crs.gcs)
-writeshape(buf.g, pd.gcs$wbd.buf)
+buf.g = sf::st_transform(buf.p, xfg$crs.gcs)
+writeshape(buf.g, file = pd.gcs$wbd.buf)
 
-wb.g=spTransform(wb.p, CRSobj = xfg$crs.gcs )
-writeshape(wb.g, pd.gcs$wbd)
+wb.g = sf::st_transform(wb.p, xfg$crs.gcs)
+writeshape(wb.g, file = pd.gcs$wbd)
 
 
 # ================= DEM =================
@@ -46,29 +46,29 @@ if(!file.exists(xfg$fr.dem)){
                             crop=TRUE)
 }
 
-dem0=raster(xfg$fr.dem)
+dem0 = terra::rast(xfg$fr.dem)
 # -------CROP DEM -----------------
 # Crop the dem AND conver the dem to PCS.
-fun.gdalwarp(f1=xfg$fr.dem, f2=pd.pcs$dem, t_srs = xfg$crs.pcs, s_srs = crs(dem0), 
+fun.gdalwarp(f1=xfg$fr.dem, f2=pd.pcs$dem, t_srs = xfg$crs.pcs, s_srs = terra::crs(dem0), 
              opt = paste0('-cutline ', pd.pcs$wbd.buf) )
 # Crop the dem, output is in GCS
-fun.gdalwarp(f1=xfg$fr.dem, f2=pd.gcs$dem, t_srs = xfg$crs.gcs, s_srs = crs(dem0), 
+fun.gdalwarp(f1=xfg$fr.dem, f2=pd.gcs$dem, t_srs = xfg$crs.gcs, s_srs = terra::crs(dem0), 
              opt = paste0('-cutline ', pd.pcs$wbd.buf) )
 
 # =========Stream Network===========================
-stm0 = readOGR(xfg$fsp.stm)  # data 0: raw data
-stm1 = spTransform(stm0, xfg$crs.pcs)  # data 1: PCS
+stm0 = sf::st_read(xfg$fsp.stm, quiet = TRUE)  # data 0: raw data
+stm1 = sf::st_transform(stm0, xfg$crs.pcs)  # data 1: PCS
 fun.simplifyRiver <- function(rmDUP=TRUE){
-  riv.xy = extractCoords(stm1)
+  riv.xy = sf::st_coordinates(stm1)
   npoint = nrow(riv.xy)
-  mlen = gLength(stm1) / npoint
-  r.dem = raster(pd.pcs$dem)
-  dx = mean(res(r.dem))
+  mlen = sum(as.numeric(sf::st_length(stm1))) / npoint
+  r.dem = terra::rast(pd.pcs$dem)
+  dx = mean(terra::res(r.dem))
   if( mlen < dx){
-    stm1 = gSimplify(stm1, tol = dx)
+    stm1 = sf::st_simplify(stm1, dTolerance = dx, preserveTopology = TRUE)
   }
   if(rmDUP){
-    res = rmDuplicatedLines(stm1)
+    res = sf::st_as_sf(rmDuplicatedLines(stm1))
   }else{
     res = stm1
   }
@@ -77,35 +77,34 @@ fun.simplifyRiver <- function(rmDUP=TRUE){
 # debug(sp.RiverDown)
 if(xfg$para$flowpath){
   stm1 = fun.simplifyRiver(rmDUP = FALSE)
-  stm.p= sp.RiverPath(stm1, tol.simplify = 30)$sp  # clean data with flowpath.
+  stm.p = sf::st_as_sf(sp.RiverPath(stm1, tol.simplify = 30)$sp)  # clean data with flowpath.
   stm.p = stm1
 }else{
   stm.p = stm1
 }
 
-writeshape(stm.p, file=pd.pcs$stm)
+writeshape(stm.p, file = pd.pcs$stm)
 
 #' ==========================================
 if(LAKEON){
-  spl0 = readOGR(xfg$fsp.lake)  # data 0: raw data
-  spl1 = removeholes(spl0)
-  spl.gcs = spTransform(spl1, CRSobj = xfg$crs.gcs)
-  writeshape(spl.gcs, pd.gcs$lake)
+  spl0 = sf::st_read(xfg$fsp.lake, quiet = TRUE)  # data 0: raw data
+  spl1 = sf::st_as_sf(terra::fillHoles(terra::vect(spl0)))
+  spl.gcs = sf::st_transform(spl1, xfg$crs.gcs)
+  writeshape(spl.gcs, file = pd.gcs$lake)
   
-  spl.pcs = spTransform(spl.gcs, CRSobj = xfg$crs.pcs)  # data 1: PCS
-  writeshape(spl.pcs, pd.pcs$lake)
+  spl.pcs = sf::st_transform(spl.gcs, xfg$crs.pcs)  # data 1: PCS
+  writeshape(spl.pcs, file = pd.pcs$lake)
 }
 
 #' ==== PLOT FIGURE ================
-dem.p = raster(pd.pcs$dem)
+dem.p = terra::rast(pd.pcs$dem)
 png(filename = file.path(xfg$dir$fig, paste0(prefix, '_Rawdata_Elevation.png')), type='cairo', 
     width = 7, height=7, res=300, unit='in')
 plot(dem.p)
-plot(wb.p, add=T, border=2)
+plot(sf::st_geometry(wb.p), add = TRUE, border = 2)
 if(LAKEON){
-  plot(spl.pcs, add=TRUE, border='darkblue', lwd=1.5)
+  plot(sf::st_geometry(spl.pcs), add = TRUE, border = 'darkblue', lwd = 1.5)
 }
-plot(stm.p, add=T, col=4)
+plot(sf::st_geometry(stm.p), add = TRUE, col = 4)
 dev.off()
-
 
