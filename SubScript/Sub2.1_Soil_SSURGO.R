@@ -48,5 +48,5 @@ for(i in 1:nu){
 }
 plot(r.cl)
 colnames(att) = cnames
-write.df(att, file=pd.att$geol)
-write.df(att, file=pd.att$soil)
+write_df(att, file=pd.att$geol)
+write_df(att, file=pd.att$soil)

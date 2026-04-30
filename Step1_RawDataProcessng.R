@@ -22,17 +22,17 @@ wbd0 = sf::st_make_valid(sf::st_buffer(wbd0, dist = 0)) # Remove error from irre
 
 # wbd in pcs
 wb.p = sf::st_transform(wbd0, xfg$crs.pcs)
-writeshape(wb.p, file = pd.pcs$wbd)
+sf::st_write(wb.p, dsn = pd.pcs$wbd, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 # buffer of wbd in pcs
 buf.p = sf::st_buffer(wb.p, dist = xfg$para$DistBuffer)
-writeshape(buf.p, file = pd.pcs$wbd.buf)
+sf::st_write(buf.p, dsn = pd.pcs$wbd.buf, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 buf.g = sf::st_transform(buf.p, xfg$crs.gcs)
-writeshape(buf.g, file = pd.gcs$wbd.buf)
+sf::st_write(buf.g, dsn = pd.gcs$wbd.buf, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 wb.g = sf::st_transform(wb.p, xfg$crs.gcs)
-writeshape(wb.g, file = pd.gcs$wbd)
+sf::st_write(wb.g, dsn = pd.gcs$wbd, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 
 # ================= DEM =================
@@ -77,29 +77,29 @@ fun.simplifyRiver <- function(rmDUP=TRUE){
 # debug(sp.RiverDown)
 if(xfg$para$flowpath){
   stm1 = fun.simplifyRiver(rmDUP = FALSE)
-  stm.p = sf::st_as_sf(sp.RiverPath(stm1, tol.simplify = 30)$sp)  # clean data with flowpath.
+  stm.p = calc_river_path(stm1)$paths  # clean data with flowpath.
   stm.p = stm1
 }else{
   stm.p = stm1
 }
 
-writeshape(stm.p, file = pd.pcs$stm)
+sf::st_write(stm.p, dsn = pd.pcs$stm, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 #' ==========================================
 if(LAKEON){
   spl0 = sf::st_read(xfg$fsp.lake, quiet = TRUE)  # data 0: raw data
   spl1 = sf::st_as_sf(terra::fillHoles(terra::vect(spl0)))
   spl.gcs = sf::st_transform(spl1, xfg$crs.gcs)
-  writeshape(spl.gcs, file = pd.gcs$lake)
+  sf::st_write(spl.gcs, dsn = pd.gcs$lake, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
   
   spl.pcs = sf::st_transform(spl.gcs, xfg$crs.pcs)  # data 1: PCS
-  writeshape(spl.pcs, file = pd.pcs$lake)
+  sf::st_write(spl.pcs, dsn = pd.pcs$lake, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 }
 
 #' ==== PLOT FIGURE ================
 dem.p = terra::rast(pd.pcs$dem)
 png(filename = file.path(xfg$dir$fig, paste0(prefix, '_Rawdata_Elevation.png')), type='cairo', 
-    width = 7, height=7, res=300, unit='in')
+    width = 7, height=7, res=300, units='in')
 plot(dem.p)
 plot(sf::st_geometry(wb.p), add = TRUE, border = 2)
 if(LAKEON){
@@ -107,4 +107,3 @@ if(LAKEON){
 }
 plot(sf::st_geometry(stm.p), add = TRUE, col = 4)
 dev.off()
-

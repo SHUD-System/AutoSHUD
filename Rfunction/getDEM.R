@@ -43,10 +43,10 @@ GDEM_files <- function(fn.bnd, dir.out, dir.rawdem,
   lapply(list(dir.out, dir.fig), dir.create, recursive = TRUE, showWarnings = FALSE)
   sp.bnd = sf::st_read(fn.bnd, quiet = TRUE)
   sp.bnd = sf::st_transform(sp.bnd, crs.gcs)
-  png(filename = file.path(dir.fig, paste0('GDEM_grids.png')), height = 7, width = 7, res = 300, unit = 'in')
+  png(filename = file.path(dir.fig, paste0('GDEM_grids.png')), height = 7, width = 7, res = 300, units = 'in')
   xg = fun.granule(sp.bnd, shrink = shrink)
   dev.off()
-  rSHUD::writeshape(xg, file = file.path(dir.out, paste0('GDEM_grids')))
+  sf::st_write(xg, dsn = paste0(file.path(dir.out, paste0('GDEM_grids')), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
   
   fn = paste0(fn.pre, as.matrix(xg$GID))
   fn.zip = file.path(dir.rawdem, paste0(fn, '_dem.tif'))

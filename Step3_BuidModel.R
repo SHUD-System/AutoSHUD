@@ -13,6 +13,10 @@ source('GetReady.R')
 # source('Rfunction/fun.LAIRL.R')
 # source('Rfunction/fun.Meteo.R')
 fin <- shud.filein(xfg$prjname, inpath = xfg$dir$modelin, outpath= xfg$dir$modelout)
+gisout = file.path(xfg$dir$modelin, 'gis')
+dir.create(xfg$dir$modelin, showWarnings = F, recursive = T)
+dir.create(xfg$dir$fig, showWarnings = F, recursive = T)
+dir.create(gisout, showWarnings = F, recursive = T)
 wbd = sf::st_read(pd.pcs$wbd, quiet = TRUE)
 dem = terra::rast(pd.pcs$dem)
 buf.g = sf::st_read(pd.pcs$wbd.buf, quiet = TRUE)
@@ -64,8 +68,8 @@ plot(tri, asp=1, type='n')
 
 # =========Mesh generation=====================================
 pm = shud.mesh(tri, dem=dem, AqDepth = xfg$para$AqDepth)
-spm = sf::st_as_sf(sp.mesh2Shape(pm, crs = sf::st_crs(wbd)))
-writeshape(spm, file = file.path(fin['inpath'], 'gis', 'domain'))
+spm = mesh_to_sf(pm, crs = sf::st_crs(wbd))
+sf::st_write(spm, dsn = paste0(file.path(fin['inpath'], 'gis', 'domain'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 print(nrow(spm))
 ia=getArea(pm)
 nCells = nrow(spm)
@@ -89,7 +93,7 @@ nCells = nrow(spm)
 riv0 = sf::st_read(pd.pcs$stm, quiet = TRUE)
 if(xfg$para$flowpath){
   # debug(sp.RiverPath)
-  riv1 = sf::st_as_sf(sp.RiverPath(riv0)$sp)  #Build the River Path --- Dissolve the lines.
+  riv1 = calc_river_path(riv0)$paths  #Build the River Path --- Dissolve the lines.
   riv1 = riv0
   riv2 = sf::st_as_sf(rmDuplicatedLines(riv1))
 }else{
@@ -101,7 +105,7 @@ summary(lens)
 spr = sf::st_as_sf(sp.CutSptialLines(sl = riv2, tol = tol.rivlen))
 # writeshape(spr, file=file.path(xfg$dir$predata, 'spr'))
 go.png <- function(){
-  png(file = file.path(xfg$dir$fig, 's3_data_0.png'), type=fig.type, height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_data_0.png'), type=fig.type, height=11, width=11, res=100, units='in')
   plot(dem);  plot(sf::st_geometry(wbd), add = TRUE, border = 2, lwd = 2); plot(sf::st_geometry(riv2), add = TRUE, lwd = 2, col = 4);
   plotlake()
   grid()
@@ -129,13 +133,13 @@ if( xfg$iforcing < 1 ){
                                                 dem = dem, wbd = wbd))
 }
 
-write.forc(sf::st_drop_geometry(sp.forc), path = xfg$dir$forc,
+write_forc(sf::st_drop_geometry(sp.forc), path = xfg$dir$forc,
            startdate = paste0(min(years), '0101'), 
            file=fin['md.forc'])
 
 
 go.png <-function(){
-  png(file = file.path(xfg$dir$fig, 's3_predata_data.png'), type=fig.type, height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_predata_data.png'), type=fig.type, height=11, width=11, res=100, units='in')
   plot(dem);grid()
   plot(sf::st_geometry(buf.g), add = TRUE, axes = TRUE, lwd = 2)
   plot(sf::st_geometry(wbd), add = TRUE, border = 3, lwd = 2)
@@ -147,15 +151,9 @@ go.png <-function(){
   dev.off()
 }; go.png();
 
-gisout = file.path(xfg$dir$modelin, 'gis')
-dir.create(xfg$dir$modelin, showWarnings = F, recursive = T)
-dir.create(xfg$dir$fig, showWarnings = F, recursive = T)
-dir.create(gisout, showWarnings = F, recursive = T)
-
-
 # ====== RIVER ======================
 go.png <-function(){
-  png(file = file.path(xfg$dir$fig, 's3_data_1.png'), type=fig.type, height=11, width=11, res=100, unit='in')
+  png(file = file.path(xfg$dir$fig, 's3_data_1.png'), type=fig.type, height=11, width=11, res=100, units='in')
   plot(dem); plot(sf::st_geometry(wb.s2), add = TRUE, border = 2, lwd = 2);
   plot(sf::st_geometry(spr), add = TRUE, lwd = 2, col = 4)
   plotlake()
@@ -164,8 +162,8 @@ go.png <-function(){
 }; go.png()
 
 go.png <-function(){
-  png(file = file.path(xfg$dir$fig, 's3_predata_domain.png'), type=fig.type, height=11, width=11, res=100, unit='in')
-  plot_sp(spm, 'Zmax', axes=TRUE)
+  png(file = file.path(xfg$dir$fig, 's3_predata_domain.png'), type=fig.type, height=11, width=11, res=100, units='in')
+  plot_polygons(spm, field = 'Zsurf', axes=TRUE)
   plot(sf::st_geometry(spr), add=TRUE, col=2, lwd=2)
   mtext(side=3, cex=2, paste0('Ncell = ', nCells))
   plotlake()
@@ -196,36 +194,23 @@ fx <- function(x){ x[is.na(x)] = median(x, na.rm = TRUE); return(x) }
 pa = apply(pa, 2, fx)
 
 spm = cbind(spm, as.data.frame(pa))
-writeshape(spm, file = file.path(fin['inpath'], 'gis', 'domain'))
+sf::st_write(spm, dsn = paste0(file.path(fin['inpath'], 'gis', 'domain'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 # ====== generate  .riv ======================
-pr=shud.river(spr, dem)
+river_net = build_river_network(spr, dem)
+pr = as_shud_river(river_net)
 pr@rivertype$Width= pr@rivertype$Width * xfg$para$RivWidth
 pr@rivertype$Depth= xfg$para$RivDepth + (1:nrow(pr@rivertype) - 1 )*0.5
 pr@rivertype$BankSlope = 1
 spr = cbind(spr, data.frame(pr@river, pr@rivertype[pr@river$Type, ]))
-writeshape(spr, file = file.path(gisout, 'river'))
+sf::st_write(spr, dsn = paste0(file.path(gisout, 'river'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 # Cut the rivers with triangles
-nspr=nrow(spr)
-if(nspr > 10000){
-  for(i in 1:nspr){
-    message(i, '/', nspr)
-    ispr = spr[i, ]
-    iseg = sf::st_as_sf(sp.RiverSeg(spm, ispr))
-    if(i<=1){
-      sp.seg = iseg
-    }else{
-      sp.seg = rbind(sp.seg, iseg)
-    }
-  }
-}else{
-  sp.seg = sf::st_as_sf(sp.RiverSeg(spm, spr))
-}
-writeshape(sp.seg, file = file.path(gisout, 'seg'))
+sp.seg = shud.rivseg(spm, spr)
+sf::st_write(sp.seg, dsn = paste0(file.path(gisout, 'seg'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 # Generate the River segments table
-prs = shud.rivseg(sp.seg)
+prs = sf::st_drop_geometry(sp.seg)
 
 # Generate initial condition
 # debug(shud.ic)
@@ -238,7 +223,7 @@ pic = shud.ic(ncell = nrow(pm@mesh), nriv = nrow(pr@river), lakestage=lakestage,
               AqD = xfg$para$AqDepth)
 
 # Generate shapefile of mesh domain
-sp.dm = sf::st_as_sf(sp.mesh2Shape(pm))
+sp.dm = mesh_to_sf(pm)
 # model configuration, parameter
 cfg.para = shud.para(nday = nday)
 cfg.para['INIT_MODE']=3
@@ -255,8 +240,8 @@ if(xfg$para$QuickMode){
 }else{
   # asoil=SoilGeol(spm=spm, rdsfile = file.path(xfg$dir$predata, 'Soil_sl1.RDS')  )
   # ageol=SoilGeol(spm=spm, rdsfile = file.path(xfg$dir$predata, 'Soil_sl7.RDS')  )
-  asoil = as.matrix(read.df(pd.att$soil)[[1]])
-  ageol = as.matrix(read.df(pd.att$geol)[[1]])
+  asoil = as.matrix(read_df(pd.att$soil)[[1]])
+  ageol = as.matrix(read_df(pd.att$geol)[[1]])
   asoil[asoil[, 3] > 5, 3] = NA
   ageol[ageol[, 3] > 5, 3] = NA
   fx <- function(x){ x[is.na(x) | is.nan(x)] = mean(x, na.rm=TRUE); return(x) }
@@ -273,7 +258,7 @@ alc = sort(stats::na.omit(unique(terra::values(r.lc))))
 
 if(xfg$ilanduse == 0.1){
   # undebug(read.df)
-  para.lc = read.df('Table/USGS_GLC.csv')[[1]]
+  para.lc = read_df('Table/USGS_GLC.csv')[[1]]
 }
 if(xfg$ilanduse == 0.1){
   lr = LaiRf.GLC(years=(min(years):(max(years))+30) )
@@ -284,37 +269,37 @@ if(xfg$ilanduse == 0.1){
   stop()
 }
 
-png(file = file.path(xfg$dir$fig, 's3_data_lairl.png'), type=fig.type, height=7, width=7, res=300, unit='in')
+png(file = file.path(xfg$dir$fig, 's3_data_lairl.png'), type=fig.type, height=7, width=7, res=300, units='in')
 par(mfrow=c(2,1))
 col=1:length(alc)
 plot(lr$LAI, col=col, main='LAI'); legend('top', paste0(alc), col=col, lwd=1)
 plot(lr$RL, col=col, main='Roughness Length'); legend('top', paste0(alc), col=col, lwd=1)
 dev.off()
-write.tsd(lr$LAI, file = fin['md.lai'])
-write.tsd(lr$RL, file = fin['md.rl'])
+write_tsd(lr$LAI, file = fin['md.lai'])
+write_tsd(lr$RL, file = fin['md.rl'])
 
 #MeltFactor
 mf = MeltFactor(years = years)
-write.tsd(mf, file=fin['md.mf'])
+write_tsd(mf, file=fin['md.mf'])
 
 # write SHUD input files.
-write.mesh( pm, file = fin['md.mesh'])
-write.riv(pr, file=fin['md.riv'])
-write.ic(pic, file=fin['md.ic'])
+write_mesh( pm, file = fin['md.mesh'])
+write_river(pr, file=fin['md.riv'])
+write_ic(pic, file=fin['md.ic'])
 
-write.df(pa, file=fin['md.att'])
-write.df(prs, file=fin['md.rivseg'])
-write.df(para.lc, file=fin['md.lc'])
-write.df(para.soil, file=fin['md.soil'])
-write.df(para.geol, file=fin['md.geol'])
+write_df(pa, file=fin['md.att'])
+write_df(prs, file=fin['md.rivseg'])
+write_df(para.lc, file=fin['md.lc'])
+write_df(para.soil, file=fin['md.soil'])
+write_df(para.geol, file=fin['md.geol'])
 
 cfg.para$START=xfg$para$STARTDAY
 cfg.para$END=xfg$para$ENDDAY
 cfg.para$CRYOSPHERE = xfg$para$CRYOSPHERE
 cfg.para$MAX_SOLVER_STEP = xfg$para$MAX_SOLVER_STEP
 
-write.config(cfg.para, fin['md.para'])
-write.config(cfg.calib, fin['md.calib'])
+write_config(cfg.para, fin['md.para'])
+write_config(cfg.calib, fin['md.calib'])
 print(nrow(pm@mesh))
 print(nrow(pr@river))
 
@@ -330,7 +315,7 @@ if(any( is.na(pa)) ){
 pp = shud.env(prjname = xfg$prjname, inpath = xfg$dir$modelin, outpath = xfg$dir$modelout)
 ia= getArea()
 ma=MeshAtt()
-png(file.path(xfg$dir$fig, paste0('hist_Area.png')), type=fig.type, width=9, height=9, unit='in', res=200)
+png(file.path(xfg$dir$fig, paste0('hist_Area.png')), type=fig.type, width=9, height=9, units='in', res=200)
 par(mfrow=c(2, 1))
 hist(ia/1e6, xlab='Area (km2)')
 hist(sqrt(ia)/1e3, xlab='Length (km)')

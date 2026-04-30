@@ -8,5 +8,5 @@ fin <- shud.filein(prjname, inpath = dir.modelin, outpath= dir.modelout)
 # file.remove(x)
 
 shud.env(prjname,inpath = fin['inpath'], outpath = fin['outpath'])
-readmesh()
-ia=getArea(pm = readmesh())
+read_mesh()
+ia=getArea(pm = read_mesh())

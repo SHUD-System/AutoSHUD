@@ -13,8 +13,9 @@ pp = shud.env(prjname = xfg$prjname, inpath = xfg$dir$modelin, outpath = xfg$dir
 ia=getArea(); AA = sum(ia)
 res=round(sqrt(mean(ia)), -2)
 rmask=shud.mask(cellsize = res)
-spr=readriv.sp()
-oid=getOutlets()
+spr=read_river_sp()
+pr=read_river()
+oid=get_river_outlets(pr@river$Down)
 vns= c("eleysurf","eleyunsat","eleygw",
        "elevprcp","elevetp",
        "elevinfil","elevrech",
@@ -24,7 +25,7 @@ vns= c("eleysurf","eleyunsat","eleygw",
 # undebug(BasicPlot)
 xl=loaddata(varname = vns)
 stop()
-png.control('WaterBalance.png', path=pp$anapath)
+png(filename = file.path(pp$anapath, 'WaterBalance.png'), height = 7, width = 7, res = 300, units = 'in')
 wb=wb.all(xl=xl, apply.weekly, plot = T)
 dev.off()
 

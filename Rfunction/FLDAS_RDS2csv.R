@@ -57,13 +57,13 @@ sitename
 fns=paste0(sitename, '.csv')
 for(i in 1:nx){
   fn=fns[i]
-  write.tsd(xl[[i]], file.path(dir.forc, fn))
+  write_tsd(xl[[i]], file.path(dir.forc, fn))
   if(i==1){
     xmean = xl[[i]]
   }else{
     xmean = xmean + xl[[i]]
   }
 }
-png.control(fn=paste0('Rawdata','_FLDAS_TS.png'), path = file.path(dir.png), ratio=1)
+png(filename = file.path(dir.png, paste0('Rawdata','_FLDAS_TS.png')), height = 7, width = 7, res = 300, units = 'in')
 plot.zoo(xmean/nx, main='FLDAS')
 dev.off()

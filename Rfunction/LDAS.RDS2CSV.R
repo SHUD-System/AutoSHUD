@@ -121,7 +121,7 @@ GLDAS.rds2csv <- function(xfg, fns){
         tsd = rbind(tsd, x)
       }
     }
-    write.tsd(x= round(tsd, 4), file = fn.out)
+    write_tsd(x= round(tsd, 4), file = fn.out)
     if(i==1){
       png(filename = file.path(xfg$dir$fig, paste0('ETV_', 'LDAS_TSD', '.png')), height = 7, width = 7, units = 'in', res = 300)
       par(mar=c(2, 2, 1, 1) )
@@ -144,4 +144,3 @@ LDAS.funs <- list(
 )
 ldasfun <- LDAS.funs[[tolower(xfg$meteorological_data)]]
 CMFD.rds2csv(xfg, fns = fns)
-

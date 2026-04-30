@@ -25,7 +25,7 @@ wb.p = sf::st_read(pd.pcs$wbd, quiet = TRUE)
 stm.p = sf::st_read(pd.pcs$stm, quiet = TRUE)
 
 go.plot <- function(){
-  tab = read.df('Table/USGS_GLC.csv', sep='\t')[[1]]
+  tab = read_df('Table/USGS_GLC.csv', sep='\t')[[1]]
   clr = read.table('Table/LCType_color.clr', sep='\t')
   tocol = function(x){rgb(x[, 1], x[, 2],x[, 3], min(1, x[, 4]) )
   }
@@ -35,7 +35,7 @@ go.plot <- function(){
   brk = 0:17
   txt = rep('', 17); txt[ulc] = '(x)'
   labs = paste0(tab$remark, txt)
-  png(filename = file.path(xfg$dir$fig, paste0(prefix,'_Landuse.png')), height = 7, width=9, unit='in', res=200)
+  png(filename = file.path(xfg$dir$fig, paste0(prefix,'_Landuse.png')), height = 7, width=9, units='in', res=200)
   par(mar=c(3, 3, 3, 15))
   plot(r.lu, legend=FALSE, col=col, breaks=brks)
   # plot(r.lu, legend.only=TRUE, col=col, breaks=brks, label=labs)

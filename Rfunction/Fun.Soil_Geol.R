@@ -50,7 +50,7 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
     fatt=pd.att$soil
   }else{
     # texture = fx(x[idx, col_ID])
-    write.df(texture, file=file.path(outdir, 'GEOL.csv'))
+    write_df(texture, file=file.path(outdir, 'GEOL.csv'))
     # para = PTF.geol(x=texture, rm.outlier = T)
     # raster::writeRaster(r1, filename = file.path(outdir, 'GEOL.tif'), overwrite=TRUE)
     fp = pd.pcs$geol.r
@@ -58,7 +58,7 @@ fun.Soil_Geol <- function(fn.r, fn.tab, TOP=TRUE,
     fatt = pd.att$geol
   }
   
-  write.df(texture, file=fatt)
+  write_df(texture, file=fatt)
   current_crs <- sf::st_crs(terra::crs(r1))
   target_crs <- xfg$crs.pcs
   

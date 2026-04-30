@@ -30,7 +30,7 @@ plot(sf::st_geometry(buf.g), add=TRUE)
 vns = names(fid$var)
 vns = vns[! grepl('time', tolower(vns))] # don't need the time_bnds
 # =========PLOT===========================
-png.control(fn=paste0(prefix, '_LDAS_location.png'), path = xfg$dir$fig, ratio=1)
+png(filename = file.path(xfg$dir$fig, paste0(prefix, '_LDAS_location.png')), height = 7, width = 7, res = 300, units = 'in')
 plot(r * 0, col='gray', legend=FALSE)
 plot(r.sub * 0, col='red', legend=FALSE, add=TRUE)
 plot(sf::st_geometry(buf.g), add=TRUE)
@@ -46,8 +46,8 @@ plot(sf::st_geometry(sp.forc)); plot(sf::st_geometry(buf.g), add = TRUE)
 
 sp0.gcs = sf::st_transform(sp.forc, xfg$crs.gcs)
 sp0.pcs = sf::st_transform(sp.forc, xfg$crs.pcs)
-writeshape(sp0.gcs, file = pd.gcs$meteoCov)
-writeshape(sp0.pcs, file = pd.pcs$meteoCov)
+sf::st_write(sp0.gcs, dsn = pd.gcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sf::st_write(sp0.pcs, dsn = pd.pcs$meteoCov, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 
 
 
@@ -71,7 +71,7 @@ for (idd in 1:ndir) {
       message('\t', j, '/', nf, '\t', basename(fn))
       ncid = nc_open(fn)
       # debug(readnc)
-      x.nc = readnc(ncid, varid=vns, ext=ext)
+      x.nc = readnc(ncid, varid = vns, ext = ext)
       nc_close(ncid)
       if(j == 1){
         d3 = dim(x.nc$arr)

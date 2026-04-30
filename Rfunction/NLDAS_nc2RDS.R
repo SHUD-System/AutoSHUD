@@ -47,7 +47,7 @@ tmp =  x$data[, , 1, 1]*0
 tmp[idx.cr[, 1], idx.cr[, 2]]= 1 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 r1 = fun.toRaster(x=tmp[, nlat:1])
 
-png.control(fn=paste0(prefix, '_LDAS_location.png'), path = xfg$dir$fig, ratio=1, ht=9, wd=12, res=300)
+png(filename = file.path(xfg$dir$fig, paste0(prefix, '_LDAS_location.png')), height = 9, width = 12, res = 300, units = 'in')
 # plot(r, col='gray',legend=FALSE)
 plot(r1,legend=FALSE)
 plot(sf::st_geometry(sp.ldas), add = TRUE, border = 4)
@@ -132,5 +132,5 @@ for(i in 1:n3){
   # barplot(apply.daily(yt$Precip, max)[1:150])
   # readline(paste0(i))
   # print(mean(apply.yearly(yt$Precip, sum)/24))
-  write.tsd(yt, file = fn.csv)
+  write_tsd(yt, file = fn.csv)
 }
