@@ -4,19 +4,19 @@
 source('Rfunction/fun.SSURGO.R')
 #' ==========Soil Raster =============
 fn0.soil = file.path(xfg$dir$soil, 'gSSURGO-mukey.tif')
-r0 = raster(fn0.soil)
+r0 = terra::rast(fn0.soil)
 tmpsoil = file.path(dir.pd.pcs, 'soil_mukey.tif')
 fun.gdalcut( f.in = fn0.soil, 
              f.mask = pd.pcs$wbd.buf, 
              f.out = tmpsoil, 
-             s_srs = crs(r0), t_srs = xfg$crs.pcs)
-r1 = raster(tmpsoil)
-uk = sort(unique(r1))
+             s_srs = terra::crs(r0), t_srs = xfg$crs.pcs)
+r1 = terra::rast(tmpsoil)
+uk = sort(stats::na.omit(unique(terra::values(r1))))
 
 rcl = cbind(uk, 1:length(uk))
-r.cl = reclassify(r1, rcl=rcl)
+r.cl = terra::classify(r1, rcl = rcl)
 plot(r.cl)
-writeRaster(r.cl, filename = pd.pcs$soil.r, overwrite=TRUE)
+terra::writeRaster(r.cl, filename = pd.pcs$soil.r, overwrite = TRUE)
 
 #' ========Soil texture ==============
 # cnames = c('sandtotal_r', 'silttotal_r', 'claytotal_r', 'om_r',  'dbthirdbar_r',
@@ -50,4 +50,3 @@ plot(r.cl)
 colnames(att) = cnames
 write.df(att, file=pd.att$geol)
 write.df(att, file=pd.att$soil)
-

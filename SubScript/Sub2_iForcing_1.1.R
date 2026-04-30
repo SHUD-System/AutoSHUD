@@ -2,18 +2,18 @@
 # library(raster)
 # library(rgeos)
 # library(rSHUD)
-x=readOGR(xfg$fsp.forc)
+x = sf::st_read(xfg$fsp.forc, quiet = TRUE)
 # y=readOGR(
 
-ysp=spTransform(y, crs(x))
-e1 = extent(ysp)
-e2 = extent(x)
-rw = c(min(e1[1], e2[1]), 
-       max(e1[2], e2[2]),
-       min(e1[3], e2[3]),
-       max(e1[4], e2[4]) ) + c(-1, 1, -1, 1)
-vx=voronoipolygons(x, rw=rw, crs=crs(x))
-plot(vx); plot(add=T, x); plot(add=T, ysp)
+ysp = sf::st_transform(y, sf::st_crs(x))
+e1 = terra::ext(terra::vect(ysp))
+e2 = terra::ext(terra::vect(x))
+rw = c(min(e1$xmin, e2$xmin),
+       max(e1$xmax, e2$xmax),
+       min(e1$ymin, e2$ymin),
+       max(e1$ymax, e2$ymax)) + c(-1, 1, -1, 1)
+vx = sf::st_as_sf(voronoipolygons(x, rw = rw, crs = sf::st_crs(x)))
+plot(sf::st_geometry(vx)); plot(sf::st_geometry(x), add = TRUE); plot(sf::st_geometry(ysp), add = TRUE)
 
-vx@data=data.frame(vx@data, 'ID'=x@data$ID)
-writeshape(vx, '/Users/leleshu/Dropbox/Project/2020_Heihe/shud/Data/Forcing')
+vx$ID = x$ID
+writeshape(vx, file = '/Users/leleshu/Dropbox/Project/2020_Heihe/shud/Data/Forcing')

@@ -1,9 +1,9 @@
 
 raster2Polygon <- function(rx){
-  ext= raster::extent(rx)
-  res =raster::res(rx)
-  xx = seq(ext[1], ext[2], res[1])
-  yy = seq(ext[3], ext[4], res[2])
-  spx = rSHUD::fishnet(xx=xx, yy=yy, crs=raster::crs(rx))
-  return(spx)
+  rx = terra::rast(rx)
+  ext = terra::ext(rx)
+  dxy = terra::res(rx)
+  xx = seq(ext$xmin, ext$xmax, by = dxy[1])
+  yy = seq(ext$ymin, ext$ymax, by = dxy[2])
+  sf::st_as_sf(rSHUD::fishnet(xx = xx, yy = yy, crs = terra::crs(rx)))
 }

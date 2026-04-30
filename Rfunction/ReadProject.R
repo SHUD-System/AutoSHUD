@@ -92,15 +92,15 @@ read.prj <- function(fn.prj){
   if( !is.null(crs.fn)){
     if(file.exists(crs.fn)){
       message('CRS file:', crs.fn)
-      crs.pcs <- raster::crs(rgdal::readOGR(crs.fn))
+      crs.pcs <- sf::st_crs(sf::st_read(crs.fn, quiet = TRUE))$wkt
     }else{
       message('CRS file is missing. So Albers projection is used')
-      crs.pcs <-  rSHUD::crs.Albers(rgdal::readOGR(fsp.wbd))
+      crs.pcs <- sf::st_crs(rSHUD::crs.Albers(sf::st_read(fsp.wbd, quiet = TRUE)))$wkt
       message(crs.pcs)
     }
   }else{
     message('CRS file is missing. So Albers projection is used')
-    crs.pcs <-  rSHUD::crs.Albers(rgdal::readOGR(fsp.wbd))
+    crs.pcs <- sf::st_crs(rSHUD::crs.Albers(sf::st_read(fsp.wbd, quiet = TRUE)))$wkt
     message(crs.pcs)
   }
   
@@ -144,7 +144,7 @@ read.prj <- function(fn.prj){
   
   
   
-  crs.gcs = sp::CRS('+init=epsg:4326')
+  crs.gcs = sf::st_crs(4326)
   
   # Some Constant values in the working environments.
   DistBuffer = getVAL(xcfg, 'DistBuffer', real = TRUE) #distance to build the buffer region.

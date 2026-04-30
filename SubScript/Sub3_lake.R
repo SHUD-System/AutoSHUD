@@ -1,3 +1,2 @@
-spl0 = readOGR(pd.pcs$lake)
-sp.lake = gSimplify(spl0, bm.para$tol.wb)
-
+spl0 = sf::st_read(pd.pcs$lake, quiet = TRUE)
+sp.lake = sf::st_simplify(spl0, dTolerance = bm.para$tol.wb, preserveTopology = TRUE)

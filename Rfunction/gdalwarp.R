@@ -27,10 +27,10 @@ fun.gdalwarp <- function(f1, f2, s_srs, t_srs, opt=NULL, run=TRUE){
 #' Mask a file.
 fun.gdalcut <- function(f.in, f.mask, f.out, s_srs=NULL, t_srs=NULL, run=TRUE, opt=''){
   if(is.null(s_srs) ){
-    s_srs = crs(raster(f.in))
+    s_srs = terra::crs(terra::rast(f.in))
   }
   if(is.null(t_srs) ){
-    t_srs = crs(raster(f.in))
+    t_srs = terra::crs(terra::rast(f.in))
   }
   fun.gdalwarp(f1 = f.in, f2 = f.out, 
                s_srs = s_srs, t_srs = t_srs,

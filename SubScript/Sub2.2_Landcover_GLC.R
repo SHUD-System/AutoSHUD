@@ -19,10 +19,10 @@ fun.gdalcut(f.in = xfg$fn.landuse,
 # system(cmds) # Cut the data, in GCS
 # system(cmds1) # Convert the data from GCS to PCS
 
-r.lu = raster(pd.pcs$lu.r)
+r.lu = terra::rast(pd.pcs$lu.r)
 
-wb.p = readOGR(pd.pcs$wbd)
-stm.p = readOGR(pd.pcs$stm)
+wb.p = sf::st_read(pd.pcs$wbd, quiet = TRUE)
+stm.p = sf::st_read(pd.pcs$stm, quiet = TRUE)
 
 go.plot <- function(){
   tab = read.df('Table/USGS_GLC.csv', sep='\t')[[1]]
@@ -30,7 +30,7 @@ go.plot <- function(){
   tocol = function(x){rgb(x[, 1], x[, 2],x[, 3], min(1, x[, 4]) )
   }
   col =  tocol(clr[, 2:5]/255)
-  ulc = cellStats(r.lu, unique, na.rm=TRUE)
+  ulc = sort(stats::na.omit(unique(terra::values(r.lu))))
   
   brk = 0:17
   txt = rep('', 17); txt[ulc] = '(x)'
@@ -45,8 +45,8 @@ go.plot <- function(){
        axis.args=list(at=0:16+.5, labels=labs, cex.axis=.75),
        legend.args=list(text='',side=3, font=2, cex=0.8))
   
-  plot(wb.p, add=T, border='red', lwd=2)
-  plot(stm.p, add=T, col='blue', lwd=1)
+  plot(sf::st_geometry(wb.p), add = TRUE, border = 'red', lwd = 2)
+  plot(sf::st_geometry(stm.p), add = TRUE, col = 'blue', lwd = 1)
   grid()
   title('Landuse: USGS Global Land Cover')
   
@@ -107,4 +107,3 @@ go.plot <- function(){
 # write.df(vtab, file=file.path(xfg$dir$predata,'LANDUSE.csv') )
 # write.table(vtab, file.path(xfg$dir$predata,'LanduseTable.csv'), quote=F, 
 #             col.names = T, row.names = F)
-

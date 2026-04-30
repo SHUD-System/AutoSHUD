@@ -10,18 +10,18 @@ cmds=paste('gdalwarp -overwrite -q -cutline',
            fsource, file.path(dir.predata, fns) )
 cmds1=paste('gdalwarp -overwrite -dstnodata -9 -q',
             '-t_srs', paste0("'epsg:4326'"),
-            '-t_srs', paste0("'", crs(wbd), "'"),
+            '-t_srs', paste0("'", sf::st_crs(wbd)$wkt, "'"),
             file.path(dir.predata, fns), file.path(dir.predata, fns1) )
 
 system(cmds)
 system(cmds1)
 
-r = raster(file.path(dir.predata, fns1))
+r = terra::rast(file.path(dir.predata, fns1))
 png.control(fn=paste0(fns1,'.png'), path = file.path(dir.png), ratio=1)
 plot(r)
-plot(wbd.buf, add=T, axes=T, lwd=2)
-plot(wbd, add=T, border=3, lwd=2)
-plot(stm, add=T, col=2, lwd=2)
+plot(sf::st_geometry(wbd.buf), add=TRUE, axes=TRUE, lwd=2)
+plot(sf::st_geometry(wbd), add=TRUE, border=3, lwd=2)
+plot(sf::st_geometry(stm), add=TRUE, col=2, lwd=2)
 title('Landuse')
 dev.off()
 
@@ -48,10 +48,10 @@ rcl = rbind(c(0,0),
 rcl[,2]=rcl[,2]+1 #classes start from 1, instead of 0;
 
 r.lu = r
-r.lsm = raster::reclassify(r.lu, rcl)
+r.lsm = terra::classify(r.lu, rcl)
 ulc = unique(r.lsm)
 
-writeRaster(r.lsm,  filename = file.path(dir.predata, 'Landuse_idx.tif'), overwrite=T)
+terra::writeRaster(r.lsm, filename = file.path(dir.predata, 'Landuse_idx.tif'), overwrite = TRUE)
 # saveraster(r.lsm, fn=file.path(outpath, 'Landuse_PCS') )
 
 # ===========================
@@ -75,4 +75,3 @@ colnames(vtab)=cn
 vtab[, 'ROUGH']=(vtab[, 'ROUGH']/10+0.08)/86400
 write.table(vtab, file.path(dir.predata,'LanduseTable.csv'), quote=F, 
             col.names = T, row.names = F)
-

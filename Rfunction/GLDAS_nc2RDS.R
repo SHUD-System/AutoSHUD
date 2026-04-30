@@ -11,8 +11,8 @@ require(ncdf4)
 # spx = readOGR(pd.gcs$meteoCov)
 # fl=spx@data
 
-buf.g = readOGR(pd.gcs$wbd.buf)
-ext = extent(buf.g)
+buf.g = sf::st_read(pd.gcs$wbd.buf, quiet = TRUE)
+ext = terra::ext(terra::vect(buf.g))
 
 dir.years = file.path(xfg$dir.ldas, xfg$years)
 
@@ -25,7 +25,7 @@ r = xyz2Raster(x = nc.all)
 r.sub = xyz2Raster(x = nc.sub)
 
 plot(r.sub); 
-plot(add=T, buf.g)
+plot(sf::st_geometry(buf.g), add=TRUE)
 
 vns = names(fid$var)
 vns = vns[! grepl('time', tolower(vns))] # don't need the time_bnds
@@ -33,19 +33,19 @@ vns = vns[! grepl('time', tolower(vns))] # don't need the time_bnds
 png.control(fn=paste0(prefix, '_LDAS_location.png'), path = xfg$dir$fig, ratio=1)
 plot(r * 0, col='gray', legend=FALSE)
 plot(r.sub * 0, col='red', legend=FALSE, add=TRUE)
-plot(buf.g, add=T)
+plot(sf::st_geometry(buf.g), add=TRUE)
 dev.off()
 
 # =========Get the data===========================
 yx = expand.grid(nc.sub$y, nc.sub$x)
 rn = paste0('X', yx[, 2], 'Y',yx[,1])
 ext.fn = c(range(yx[, 2]), range(yx[, 1]) ) + c(-1, 1, -1, 1) *0.5 * xfg$res
-sp.forc = fishnet(xx=seq(ext.fn[1], ext.fn[2], xfg$res), 
-                  yy=seq(ext.fn[3], ext.fn[4], xfg$res), crs=xfg$crs.gcs)
-plot(sp.forc); plot(buf.g, add=T)
+sp.forc = sf::st_as_sf(fishnet(xx = seq(ext.fn[1], ext.fn[2], xfg$res),
+                               yy = seq(ext.fn[3], ext.fn[4], xfg$res), crs = xfg$crs.gcs))
+plot(sf::st_geometry(sp.forc)); plot(sf::st_geometry(buf.g), add = TRUE)
 
-sp0.gcs = spTransform(sp.forc, xfg$crs.gcs)
-sp0.pcs = spTransform(sp.forc, xfg$crs.pcs)
+sp0.gcs = sf::st_transform(sp.forc, xfg$crs.gcs)
+sp0.pcs = sf::st_transform(sp.forc, xfg$crs.pcs)
 writeshape(sp0.gcs, file = pd.gcs$meteoCov)
 writeshape(sp0.pcs, file = pd.pcs$meteoCov)
 

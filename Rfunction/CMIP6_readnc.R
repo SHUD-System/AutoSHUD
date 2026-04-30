@@ -158,8 +158,8 @@ ReadNC<-function(ncid, varid=NULL,  ext = NULL, t.len=NULL){
 
 
 initalGrids <- function(fn, vn, pd.gcs, pd.pcs, sp.ldas=NULL){
-  buf.g = readOGR(pd.gcs$wbd.buf)
-  ext = extent(buf.g)
+  buf.g = sf::st_read(pd.gcs$wbd.buf, quiet = TRUE)
+  ext = terra::ext(terra::vect(buf.g))
   
   fid = nc_open(fn) 
   nc.all = ReadNC(fid, varid = vn, t.len = 2)
@@ -177,17 +177,17 @@ initalGrids <- function(fn, vn, pd.gcs, pd.pcs, sp.ldas=NULL){
     png.control(fn=paste0(prefix, '_LDAS_location.png'), path = xfg$dir$fig, ratio=1)
     plot(r * 0, col='gray', legend=FALSE)
     plot(r.sub * 0, col='red', legend=FALSE, add=TRUE)
-    plot(buf.g, add=T)
+    plot(sf::st_geometry(buf.g), add = TRUE)
     dev.off()
     
     # =========Get the data===========================
-    sp0.gcs = spTransform(sp.ldas, xfg$crs.gcs)
-    sp0.pcs = spTransform(sp.ldas, xfg$crs.pcs)
+    sp0.gcs = sf::st_transform(sp.ldas, xfg$crs.gcs)
+    sp0.pcs = sf::st_transform(sp.ldas, xfg$crs.pcs)
   }
-  id=which(gIntersects(sp0.gcs, buf.g, byid = T)) 
+  id = which(lengths(sf::st_intersects(sp0.gcs, buf.g)) > 0)
   writeshape(sp0.gcs[id, ], file = pd.gcs$meteoCov)
   writeshape(sp0.pcs[id, ], file = pd.pcs$meteoCov)
-  sitenames = paste0('X', sp0.gcs@data$xcenter, 'Y', sp0.gcs@data$ycenter)
+  sitenames = paste0('X', sp0.gcs$xcenter, 'Y', sp0.gcs$ycenter)
   sitenames=sitenames[id]
   
   # plot(sp0.gcs)

@@ -3,9 +3,9 @@
 #install.packages('ncdf4')
 require(ncdf4)
 source('GetReady.R')
-source('Rfunction/Fun.readnc.R')
+if(file.exists('Rfunction/Fun.readnc.R')) source('Rfunction/Fun.readnc.R')
 
-fl=readOGR(file.path(dir.predata, 'FLDAS_GCS.shp'))@data
+fl = sf::st_read(file.path(dir.predata, 'FLDAS_GCS.shp'), quiet = TRUE)
 head(fl)
 # years=2017:2018
 dirs = file.path(dir.fldas, years)
@@ -20,8 +20,8 @@ nx=length(xloc)
 ny = length(yloc)
 
 #===================================================
-xc = fl[,'xcenter']
-yc = fl[,'ycenter']
+xc = fl[['xcenter']]
+yc = fl[['ycenter']]
 
 xid = match(round(xc, 2), xloc)
 yid = match(round(yc,2), yloc)
@@ -38,7 +38,7 @@ mat=mat*0+1
 png.control(fn=paste0('Rawdata','_FLDAS_location.png'), path = file.path(dir.png), ratio=1)
 image(xloc, yloc, mat, xlab='Lon', ylab='Lat', main='Coverage of FLDAS') ; grid()
 points(xloc[xid], yloc[yid], col=3)
-plot(wbd.gcs, add=T)
+plot(sf::st_geometry(wbd.gcs), add=TRUE)
 dev.off()
 
 nv=length(vns)

@@ -3,17 +3,17 @@
 require(ncdf4)
 source('Rfunction/LDAS_UnitConvert.R')
 
-sp.ldas = readOGR(pd.gcs$meteoCov)
-fl = sp.ldas@data
+sp.ldas = sf::st_read(pd.gcs$meteoCov, quiet = TRUE)
+fl = sf::st_drop_geometry(sp.ldas)
 
-buf.g = readOGR(pd.gcs$wbd.buf)
-ext = extent(buf.g)
+buf.g = sf::st_read(pd.gcs$wbd.buf, quiet = TRUE)
+ext = terra::ext(terra::vect(buf.g))
 
 ext.nldas = c(-125, -67, 25, 53)
 res = xfg$res
 xx = seq(ext.nldas[1] + res / 2, ext.nldas[2] - res / 2, by=res)
 yy = seq(ext.nldas[3] + res / 2, ext.nldas[4] - res / 2, by=res)
-sp.fnpt =fishnet(xx = xx, yy=yy, crs =crs(sp.ldas), type='point')
+sp.fnpt = fishnet(xx = xx, yy = yy, crs = sf::st_crs(sp.ldas), type = 'point')
 # writeshape(sp.fnpt, 'fnpt')
 # idx.fn = rgeos::gContains(sp.ldas, sp.fnpt, byid = TRUE)
 # idx.fn = gIntersects(sp.ldas, sp.fnpt, byid = TRUE)
@@ -22,8 +22,8 @@ sp.fnpt =fishnet(xx = xx, yy=yy, crs =crs(sp.ldas), type='point')
 
 nlon = length(xx)
 nlat = length(yy)
-px = sp.ldas@data$xcenter
-py = sp.ldas@data$ycenter
+px = sp.ldas$xcenter
+py = sp.ldas$ycenter
 idx.cr=cbind( match(px, xx), match(py, yy)) # match column and row.
 
 dir.years = file.path(xfg$dir.ldas, xfg$years)
@@ -34,10 +34,11 @@ fn
 x=readRDS(fn)
 # vns = dimnames(x$data)[[3]]
 fun.toRaster <- function(x){
-  r = raster(); 
-  extent(r) = ext.nldas; 
-  res(r) = xfg$res
-  r=setValues(r, as.numeric(x))
+  r = terra::rast(ncols = nlon, nrows = nlat,
+                  xmin = ext.nldas[1], xmax = ext.nldas[2],
+                  ymin = ext.nldas[3], ymax = ext.nldas[4],
+                  crs = sf::st_crs(sp.ldas)$wkt)
+  terra::values(r) = as.numeric(x)
   r
 }
 
@@ -49,8 +50,8 @@ r1 = fun.toRaster(x=tmp[, nlat:1])
 png.control(fn=paste0(prefix, '_LDAS_location.png'), path = xfg$dir$fig, ratio=1, ht=9, wd=12, res=300)
 # plot(r, col='gray',legend=FALSE)
 plot(r1,legend=FALSE)
-plot(sp.ldas, add=TRUE, border=4)
-plot(buf.g, add=T)
+plot(sf::st_geometry(sp.ldas), add = TRUE, border = 4)
+plot(sf::st_geometry(buf.g), add = TRUE)
 dev.off()
 # stop()
 
@@ -58,7 +59,7 @@ filename = paste0('X', px, 'Y', py)
 vns = c("TMP", "SPFH", "PRES", "UGRD", "VGRD", "PEVAP", "APCP", "DSWRF" )
 
 i.dir=1
-ns=length(sp.ldas)
+ns=nrow(sp.ldas)
 nv=length(vns)
 
 # library(foreach)
@@ -133,4 +134,3 @@ for(i in 1:n3){
   # print(mean(apply.yearly(yt$Precip, sum)/24))
   write.tsd(yt, file = fn.csv)
 }
-
