@@ -15,10 +15,9 @@ rm = terra::crop(r, terra::vect(buf.g))
 # plot(rm); plot(buf.g, add=T)
 
 idx = sort(stats::na.omit(unique(terra::values(rm))))
-id.x = floor(idx / nx)
-id.y = idx - id.x * nx
-id.x
-id.y
+rc = terra::rowColFromCell(r, idx)
+id.y = sort(unique(rc[,1]))
+id.x = sort(unique(rc[,2]))
 r[id.y,]=1e8
 r[,id.x]=1e8
 # plot(r); plot(buf.g, add=TRUE)

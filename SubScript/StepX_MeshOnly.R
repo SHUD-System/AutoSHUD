@@ -95,7 +95,7 @@ nday = 365*ny + round(ny/4) - 1
 
 wb.dis = sf::st_union(wbd)
 wb.s1 = sf::st_as_sf(sf::st_simplify(wb.dis, dTolerance = tol.wb, preserveTopology = TRUE))
-wb.s2 = sp.simplifyLen(wb.s1, tol.wb)
+wb.s2 = sf::st_simplify(wb.s1, dTolerance = tol.wb)
 wb.simp = wb.s2
 plot(wb.simp)
 # generate SHUD .mesh 

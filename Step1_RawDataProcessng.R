@@ -18,7 +18,7 @@ prefix ='S1'
 wbd0 = sf::st_read(xfg$fsp.wbd, quiet = TRUE)  # Read data
 wbd0 = sf::st_make_valid(sf::st_buffer(wbd0, dist = 0)) # Remove error from irregular polygon.
 # ---- disolve ----
-wbd.dis = sf::st_as_sf(terra::fillHoles(terra::vect(sf::st_union(wbd0))))
+# wbd.dis removed — unused after sf migration
 
 # wbd in pcs
 wb.p = sf::st_transform(wbd0, xfg$crs.pcs)

@@ -67,8 +67,9 @@ if(irun$forcing>0){
     if ( xfg$iforcing == 0.1 ) {  
       # FLDAS
       message('USING FLDAS FORCING DATA')
-      if(file.exists('Rfunction/CLDAS_nc2RDS.R')) source('Rfunction/CLDAS_nc2RDS.R') # read the orginal fldas data and save to .RDS file.
-      if(file.exists('Rfunction/CLDAS_RDS2csv.R')) source('Rfunction/CLDAS_RDS2csv.R') # read the RDS above, to save as .csv file.
+      if(!file.exists('Rfunction/CLDAS_nc2RDS.R')) stop("CLDAS forcing scripts not found. iforcing=0.1 requires Rfunction/CLDAS_nc2RDS.R and CLDAS_RDS2csv.R")
+      source('Rfunction/CLDAS_nc2RDS.R')
+      source('Rfunction/CLDAS_RDS2csv.R')
     }else if ( xfg$iforcing == 0.2 ) {  
       # FLDAS
       message('USING FLDAS FORCING DATA')

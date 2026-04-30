@@ -59,7 +59,7 @@ filename = paste0('X', px, 'Y', py)
 vns = c("TMP", "SPFH", "PRES", "UGRD", "VGRD", "PEVAP", "APCP", "DSWRF" )
 
 i.dir=1
-ns=length(sp.ldas)
+ns=nrow(sp.ldas)
 nv=length(vns)
 
 # library(foreach)
