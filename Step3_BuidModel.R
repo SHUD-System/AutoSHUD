@@ -69,7 +69,7 @@ plot(tri, asp=1, type='n')
 # =========Mesh generation=====================================
 pm = shud.mesh(tri, dem=dem, AqDepth = xfg$para$AqDepth)
 spm = mesh_to_sf(pm, crs = sf::st_crs(wbd))
-sf::st_write(spm, dsn = paste0(file.path(fin['inpath'], 'gis', 'domain'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+tryCatch(sf::st_write(spm, dsn = paste0(file.path(fin['inpath'], 'gis', 'domain'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE), error = function(e) message("Warning: domain.shp write failed: ", e$message))
 print(nrow(spm))
 ia=getArea(pm)
 nCells = nrow(spm)
@@ -194,7 +194,7 @@ fx <- function(x){ x[is.na(x)] = median(x, na.rm = TRUE); return(x) }
 pa = apply(pa, 2, fx)
 
 spm = cbind(spm, as.data.frame(pa))
-sf::st_write(spm, dsn = paste0(file.path(fin['inpath'], 'gis', 'domain'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+tryCatch(sf::st_write(spm, dsn = paste0(file.path(fin['inpath'], 'gis', 'domain'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE), error = function(e) message("Warning: domain.shp write failed: ", e$message))
 
 # ====== generate  .riv ======================
 river_net = build_river_network(spr, dem)
@@ -202,15 +202,22 @@ pr = as_shud_river(river_net)
 pr@rivertype$Width= pr@rivertype$Width * xfg$para$RivWidth
 pr@rivertype$Depth= xfg$para$RivDepth + (1:nrow(pr@rivertype) - 1 )*0.5
 pr@rivertype$BankSlope = 1
-spr = cbind(spr, data.frame(pr@river, pr@rivertype[pr@river$Type, ]))
-sf::st_write(spr, dsn = paste0(file.path(gisout, 'river'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+riv_df = data.frame(pr@river, pr@rivertype[pr@river$Type, ], row.names = NULL)
+names(riv_df) = paste0("R_", names(riv_df))
+names(riv_df) = make.unique(names(riv_df))
+spr = cbind(spr, riv_df)
+tryCatch(sf::st_write(spr, dsn = paste0(file.path(gisout, 'river'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE), error = function(e) message("Warning: river.shp write failed: ", e$message))
 
 # Cut the rivers with triangles
 sp.seg = shud.rivseg(spm, spr)
-sf::st_write(sp.seg, dsn = paste0(file.path(gisout, 'seg'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+sp.seg.shp = sp.seg[, c("iRiv", "iEle", "Length")]
+sp.seg.shp$SegID = seq_len(nrow(sp.seg.shp))
+sp.seg.shp = sp.seg.shp[, c("SegID", "iRiv", "iEle", "Length")]
+tryCatch(sf::st_write(sp.seg.shp, dsn = paste0(file.path(gisout, 'seg'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE), error = function(e) message("Warning: seg.shp write failed: ", e$message))
 
 # Generate the River segments table
-prs = sf::st_drop_geometry(sp.seg)
+prs = sf::st_drop_geometry(sp.seg)[, c("iRiv", "iEle", "Length")]
+prs = cbind(index = seq_len(nrow(prs)), prs)
 
 # Generate initial condition
 # debug(shud.ic)

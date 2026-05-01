@@ -1,0 +1,33 @@
+prjname 9035800
+startyear 2001
+endyear 2005
+dir.out ../deploy9035800
+fsp.wbd ./Example/9035800/wbd.shp
+fsp.stm ./Example/9035800/stm_dem.shp
+fr.dem ./Example/9035800/dem.tif
+dout.forc ../deploy9035800/forcing
+
+Forcing 1.1
+fsp.forc ./Example/9035800/meteo.shp
+
+Soil 0.1
+dir.soil ../testdata/geodata/Soil/HWSD_RASTER
+
+Landuse 0.1
+fn.landuse ../testdata/geodata/Landuse/USGS_LCI/LCType.tif
+
+NumCells 800
+AqDepth 6
+MaxArea 2
+MinAngle 30
+tol.wb 100
+tol.rivlen 200
+RivWidth 3
+RivDepth 4
+DistBuffer 1500
+flowpath 0
+QuickMode 0
+MAX_SOLVER_STEP 20
+CRYOSPHERE 0
+STARTDAY 0
+ENDDAY 1825
