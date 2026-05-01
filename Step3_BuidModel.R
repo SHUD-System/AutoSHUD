@@ -210,9 +210,12 @@ tryCatch(sf::st_write(spr, dsn = paste0(file.path(gisout, 'river'), ".shp"), dri
 
 # Cut the rivers with triangles
 sp.seg = shud.rivseg(spm, spr)
-tryCatch(sf::st_write(sp.seg, dsn = paste0(file.path(gisout, 'seg'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE), error = function(e) message("Warning: seg.shp write failed: ", e$message))
+sp.seg.shp = sp.seg[, c("iRiv", "iEle", "Length")]
+sp.seg.shp$SegID = seq_len(nrow(sp.seg.shp))
+sp.seg.shp = sp.seg.shp[, c("SegID", "iRiv", "iEle", "Length")]
+tryCatch(sf::st_write(sp.seg.shp, dsn = paste0(file.path(gisout, 'seg'), ".shp"), driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE), error = function(e) message("Warning: seg.shp write failed: ", e$message))
 
-# Generate the River segments table — only keep columns SHUD expects
+# Generate the River segments table
 prs = sf::st_drop_geometry(sp.seg)[, c("iRiv", "iEle", "Length")]
 prs = cbind(index = seq_len(nrow(prs)), prs)
 
