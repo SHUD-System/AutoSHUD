@@ -9,10 +9,15 @@ dout.forc ../deploy9035800/forcing
 
 # Forcing: 
 # -1 Dummy. No data provided.
-# 0 LDAS mode: 0.1 CLDAS, 0.2 FLDAS, 0.3 GLDAS 0.4 NLDAS 0.5 CMFD 0.6 CMIP6
+# 0 LDAS mode: 0.1 CLDAS, 0.2 FLDAS, 0.3 GLDAS 0.4 NLDAS 0.5 CMFD 0.6 CMIP6 0.7 ERA5
 # 1 Local data: 1.1 Points of metereo-station 1.2 Polygon of coverage
 # Forcing 0.5
 # dir.ldas /Volumes/ForcingData/CMFD/Data_forcing_03hr_010deg
+# Forcing 0.7
+# dir.era5 /path/to/ERA5/netcdf
+# era5.buffer.deg 0.25
+# era5.lon.mode auto
+# era5.file.pattern ERA5_{year}*.nc
 Forcing 1.1
 fsp.forc ./Example/9035800/meteo.shp
 

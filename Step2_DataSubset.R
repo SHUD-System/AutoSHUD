@@ -55,51 +55,6 @@ if(irun$landuse>0){
 }
 # # =======Forcing=============
 if(irun$forcing>0){
-  if(xfg$iforcing > 1){ 
-    
-    # local map
-  }else if(xfg$iforcing < 0){
-    
-  }else{
-    # LDAS
-    # 0 LDAS mode: 0.1 CLDAS, 0.2 FLDAS, 0.3 GLDAS 0.4 NLDAS
-    # 1 Local data: 1.1 Points of metereo-station 1.2 Polygon of coverage
-    if ( xfg$iforcing == 0.1 ) {  
-      # FLDAS
-      message('USING FLDAS FORCING DATA')
-      if(!file.exists('Rfunction/CLDAS_nc2RDS.R')) stop("CLDAS forcing scripts not found. iforcing=0.1 requires Rfunction/CLDAS_nc2RDS.R and CLDAS_RDS2csv.R")
-      source('Rfunction/CLDAS_nc2RDS.R')
-      source('Rfunction/CLDAS_RDS2csv.R')
-    }else if ( xfg$iforcing == 0.2 ) {  
-      # FLDAS
-      message('USING FLDAS FORCING DATA')
-      source('Rfunction/FLDAS_nc2RDS.R') # read the orginal fldas data and save to .RDS file.
-      source('Rfunction/FLDAS_RDS2csv.R') # read the RDS above, to save as .csv file.
-    }else if( xfg$iforcing == 0.3  ){ 
-      # GLDAS
-      message('USING GLDA FORCING DATA')
-      source('Rfunction/GLDAS_nc2RDS.R') # read the orginal fldas data and save to .RDS file.
-      source('Rfunction/GLDAS_RDS2csv.R') # read the RDS above, to save as .csv file.
-    }else if( xfg$iforcing == 0.4 ){  
-      # NLDAS
-      message('USING NLDAS FORCING DATA')
-      source('Rfunction/NLDAS_nc2RDS.R') # read the orginal fldas data and save to .RDS file.
-      source('Rfunction/NLDAS_RDS2csv.R') # read the RDS above, to save as .csv file.
-    }else if( xfg$iforcing == 0.5 ){  
-      # CMFD
-      message('USING CMFD FORCING DATA')
-      # source('Rfunction/CMFD_getRDS.R')
-      # source('Rfunction/get_LDAS_RDS.R')
-      # source('Rfunction/LDAS.RDS2CSV.R')
-      source('Rfunction/CMFD_NC2RDS.R') # read the orginal fldas data and save to .RDS file.
-      source('Rfunction/CMFD_RDS2csv.R') # read the RDS above, to save as .csv file.
-    } else if( xfg$iforcing == 0.6 ){  
-        # CMFD
-        message('USING CMIP6 FORCING DATA')
-        source('Rfunction/CMIP6_NCtoRDS.R') # read the orginal fldas data and save to .RDS file.
-        source('Rfunction/CMIP6_RDStoCSV.R') # read the RDS above, to save as .csv file.
-      }else{
-      stop(paste('WRONG LDAS CODE: ', xfg$iforcing))
-    }
-  }
+  source('Rfunction/Step2_ForcingDispatch.R')
+  autoshud_step2_dispatch_forcing(xfg = xfg, pd.gcs = pd.gcs, pd.pcs = pd.pcs)
 }

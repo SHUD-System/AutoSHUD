@@ -89,3 +89,8 @@ library(hydroTSM)
 library(hydroGOF)
 library(xts)
 fig.type='cairo'
+
+write_tsd <- rSHUD::write.tsd
+write_forc <- rSHUD::write.forc
+write_df <- rSHUD::write.df
+read_df <- rSHUD::read.df

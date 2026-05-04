@@ -112,6 +112,17 @@ go.png <- function(){
   dev.off()
 }; go.png()
 # ======FORCING FILE======================
+to_sp_crs <- function(crs) {
+  if (inherits(crs, 'CRS')) {
+    crs
+  } else {
+    sp::CRS(SRS_string = sf::st_crs(crs)$wkt)
+  }
+}
+pcs.forc = to_sp_crs(xfg$crs.pcs)
+gcs.forc = to_sp_crs(xfg$crs.gcs)
+dem.forc = raster::raster(pd.pcs$dem)
+wbd.forc = as(wbd, 'Spatial')
 if( xfg$iforcing < 1 ){
   if( xfg$iforcing < 0 ){
     sp.forc = sf::st_read(pd.pcs$wbd.buf, quiet = TRUE)
@@ -123,14 +134,15 @@ if( xfg$iforcing < 1 ){
   sp.c = sf::st_centroid(sp.forc)
   sp.c$ID = ID
   sp.c = sp.c["ID"]
+  sp.c = as(sp.c, 'Spatial')
   sp.forc = sf::st_as_sf(ForcingCoverage(sp.meteoSite = sp.c,
-                                         pcs = xfg$crs.pcs, gcs = xfg$crs.gcs,
-                                         dem = dem, wbd = wbd))
+                                         pcs = pcs.forc, gcs = gcs.forc,
+                                         dem = dem.forc, wbd = wbd.forc))
 }else{
   sp.forc = sf::st_read(xfg$fsp.forc, quiet = TRUE)
-  sp.forc = sf::st_as_sf(rSHUD::ForcingCoverage(sp.meteoSite = sp.forc,
-                                                pcs = xfg$crs.pcs, gcs = xfg$crs.gcs,
-                                                dem = dem, wbd = wbd))
+  sp.forc = sf::st_as_sf(rSHUD::ForcingCoverage(sp.meteoSite = as(sp.forc, 'Spatial'),
+                                                pcs = pcs.forc, gcs = gcs.forc,
+                                                dem = dem.forc, wbd = wbd.forc))
 }
 
 write_forc(sf::st_drop_geometry(sp.forc), path = xfg$dir$forc,

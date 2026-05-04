@@ -26,6 +26,15 @@ Mandatory data from users:
 4. Forcing data - GLDAS, FLDAS, NLDAS
 5. Hydrology - HydroSheds, GRWL
 
+#### ERA5 forcing
+
+AutoSHUD supports ERA5 as `Forcing 0.7`. This branch reads ERA5 NetCDF files
+with `tp`, `t2m`, `d2m`, `u10`, `v10`, `ssr`, and `sp`, then writes classic
+SHUD local forcing CSV files plus meteo coverage shapefiles. It is separate
+from SHUD-NC direct NetCDF forcing. See `docs/ERA5-forcing.md` for configuration
+keys such as `dir.era5`, `era5.buffer.deg`, `era5.lon.mode`, and
+`era5.file.pattern`.
+
 ## Steps
 
 1. Data preparation for the research area.
