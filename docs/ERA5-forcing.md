@@ -5,6 +5,10 @@ forcing inputs: one station-style CSV per selected ERA5 grid point plus
 `meteoCov.shp` coverage files for Step3. This is not SHUD-NC direct NetCDF
 forcing and does not set or use `FORCING_MODE=NETCDF`.
 
+For the AutoSHUD `v2.5.0` release candidate, ERA5 support remains scoped to this
+classic SHUD local forcing path. The release preparation does not change ERA5
+processing behavior, generated output schemas, or SHUD-NC forcing semantics.
+
 ## Project Configuration
 
 Required keys:
