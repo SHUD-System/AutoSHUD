@@ -1035,6 +1035,49 @@ test_that("ERA5 missing file error reports year or pattern", {
   expect_true(grepl("2099", msg))
 })
 
+if (all(have[c("ncdf4", "sf", "xts")])) {
+  test_that("ERA5 missing requested year fails before final forcing outputs", {
+    tmp <- tempfile("era5-missing-year-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    ctx$xfg$years <- 2099
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"),
+            c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2)))
+    expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs), "2099")
+    expect_true(!dir.exists(ctx$forc.dir) ||
+                  length(list.files(ctx$forc.dir, pattern = "\\.csv$")) == 0)
+    expect_true(!file.exists(ctx$pd.gcs$meteoCov),
+                "GCS meteoCov must not be published on missing-year failure")
+    expect_true(!file.exists(ctx$pd.pcs$meteoCov),
+                "PCS meteoCov must not be published on missing-year failure")
+  })
+
+  test_that("ERA5 no-grid-hit fails before final forcing outputs", {
+    tmp <- tempfile("era5-no-grid-hit-")
+    dir.create(tmp)
+    ctx <- make_era5_context(
+      tmp,
+      bbox = c(xmin = -10, xmax = -9, ymin = -10, ymax = -9),
+      era5 = list(buffer.deg = 0, lon.mode = "auto", file.pattern = NULL)
+    )
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"),
+            c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2)))
+    expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs),
+                 "no ERA5 grid points selected")
+    expect_true(!dir.exists(ctx$forc.dir) ||
+                  length(list.files(ctx$forc.dir, pattern = "\\.csv$")) == 0)
+    expect_true(!file.exists(ctx$pd.gcs$meteoCov),
+                "GCS meteoCov must not be published on no-grid-hit failure")
+    expect_true(!file.exists(ctx$pd.pcs$meteoCov),
+                "PCS meteoCov must not be published on no-grid-hit failure")
+  })
+} else {
+  skip("ERA5 no-grid-hit fails before final forcing outputs",
+       paste("requires", paste(names(have)[!have], collapse = ", ")))
+}
+
 message("Completed ", length(tests), " ERA5 tests; skipped ", length(skips), ".")
 if (length(skips)) {
   message("Skipped tests: ", paste(skips, collapse = "; "))
