@@ -293,7 +293,7 @@ era5_validate_new_path_under_root <- function(path, root, label) {
   }
   root.norm <- era5_normalize_existing_path(root, paste0(label, " root"))
   dir.norm <- era5_normalize_existing_path(root.dir, paste0(label, " directory"))
-  candidate <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  candidate <- file.path(dir.norm, basename(path))
   if (!era5_path_within(dir.norm, root.norm) || !era5_path_within(candidate, root.norm)) {
     era5_stop(label, " resolved outside output root ", root.norm, ": ", candidate, ".")
   }

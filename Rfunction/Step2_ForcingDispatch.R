@@ -2,6 +2,8 @@ if (!exists('%||%', mode = 'function')) {
   `%||%` <- function(x, y) if (is.null(x) || length(x) == 0 || all(is.na(x))) y else x
 }
 
+AUTOSHUD_LDAS_DEFAULT_MAX_CELLS <- 1000000
+
 autoshud_step2_source <- function(file, env = parent.frame()) {
   source.hook <- getOption('autoshud.step2.source')
   if (is.function(source.hook)) {
@@ -14,6 +16,24 @@ autoshud_ldas_resolution <- function(iforcing) {
   if (iforcing == 0.3) return(0.25)
   if (iforcing == 0.4) return(0.125)
   stop(paste('WRONG LDAS CODE: ', iforcing))
+}
+
+autoshud_ldas_max_cells <- function(xfg = NULL) {
+  value <- NULL
+  if (!is.null(xfg)) {
+    value <- xfg[['ldas.max.cells']] %||% xfg[['ldas_max_cells']]
+    if (is.null(value) && !is.null(xfg$ldas)) {
+      value <- xfg$ldas[['max.cells']] %||% xfg$ldas[['max_cells']]
+    }
+  }
+  value <- value %||% getOption('autoshud.ldas.max.cells',
+                                AUTOSHUD_LDAS_DEFAULT_MAX_CELLS)
+  value <- suppressWarnings(as.numeric(value[[1]]))
+  if (!is.finite(value) || value < 1) {
+    stop('LDAS fishnet max cells must be a positive finite number.',
+         call. = FALSE)
+  }
+  floor(value)
 }
 
 autoshud_step2_fishnet <- function(xx, yy, crs, type = 'polygon') {
@@ -71,9 +91,33 @@ autoshud_prepare_legacy_ldas_coverage <- function(xfg, pd.gcs, pd.pcs, res = NUL
   ext <- sf::st_bbox(buf.g)
   ext.fn <- c(floor(ext[['xmin']]), ceiling(ext[['xmax']]),
               floor(ext[['ymin']]), ceiling(ext[['ymax']]))
+  if (!is.finite(res) || res <= 0 || any(!is.finite(ext.fn)) ||
+      ext.fn[[2]] <= ext.fn[[1]] || ext.fn[[4]] <= ext.fn[[3]]) {
+    stop('LDAS fishnet requires a finite bbox and positive finite resolution.',
+         call. = FALSE)
+  }
+  nx <- floor((ext.fn[[2]] - ext.fn[[1]]) / res) + 1
+  ny <- floor((ext.fn[[4]] - ext.fn[[3]]) / res) + 1
+  candidate.cells <- as.numeric(nx - 1) * as.numeric(ny - 1)
+  max.cells <- autoshud_ldas_max_cells(xfg)
+  if (!is.finite(candidate.cells) || candidate.cells > max.cells) {
+    stop('LDAS fishnet candidate cells (', format(candidate.cells, scientific = FALSE),
+         ') exceed max cells (', format(max.cells, scientific = FALSE),
+         '). Increase option autoshud.ldas.max.cells only if this allocation is intentional.',
+         call. = FALSE)
+  }
+  xx <- seq(ext.fn[[1]], ext.fn[[2]], by = res)
+  yy <- seq(ext.fn[[3]], ext.fn[[4]], by = res)
+  candidate.cells <- as.numeric(length(xx) - 1) * as.numeric(length(yy) - 1)
+  if (!is.finite(candidate.cells) || candidate.cells > max.cells) {
+    stop('LDAS fishnet candidate cells (', format(candidate.cells, scientific = FALSE),
+         ') exceed max cells (', format(max.cells, scientific = FALSE),
+         '). Increase option autoshud.ldas.max.cells only if this allocation is intentional.',
+         call. = FALSE)
+  }
   sp.fn <- sf::st_as_sf(autoshud_step2_fishnet(
-    xx = seq(ext.fn[[1]], ext.fn[[2]], by = res),
-    yy = seq(ext.fn[[3]], ext.fn[[4]], by = res),
+    xx = xx,
+    yy = yy,
     crs = sf::st_crs(buf.g),
     type = 'polygon'
   ))
@@ -98,6 +142,14 @@ autoshud_prepare_legacy_ldas_coverage <- function(xfg, pd.gcs, pd.pcs, res = NUL
 }
 
 autoshud_step2_dispatch_forcing <- function(xfg, pd.gcs, pd.pcs) {
+  caller.env <- parent.frame()
+  sync_caller_inputs <- function() {
+    assign('xfg', xfg, envir = caller.env)
+    assign('pd.gcs', pd.gcs, envir = caller.env)
+    assign('pd.pcs', pd.pcs, envir = caller.env)
+    invisible(TRUE)
+  }
+  sync_caller_inputs()
   if (xfg$iforcing > 1) {
     # local map
   } else if (xfg$iforcing < 0) {
@@ -110,31 +162,33 @@ autoshud_step2_dispatch_forcing <- function(xfg, pd.gcs, pd.pcs) {
       if (!file.exists('Rfunction/CLDAS_nc2RDS.R')) {
         stop("CLDAS forcing scripts not found. iforcing=0.1 requires Rfunction/CLDAS_nc2RDS.R and CLDAS_RDS2csv.R")
       }
-      autoshud_step2_source('Rfunction/CLDAS_nc2RDS.R', env = environment())
-      autoshud_step2_source('Rfunction/CLDAS_RDS2csv.R', env = environment())
+      autoshud_step2_source('Rfunction/CLDAS_nc2RDS.R', env = caller.env)
+      autoshud_step2_source('Rfunction/CLDAS_RDS2csv.R', env = caller.env)
     } else if (xfg$iforcing == 0.2) {
       message('USING FLDAS FORCING DATA')
-      autoshud_step2_source('Rfunction/FLDAS_nc2RDS.R', env = environment())
-      autoshud_step2_source('Rfunction/FLDAS_RDS2csv.R', env = environment())
+      autoshud_step2_source('Rfunction/FLDAS_nc2RDS.R', env = caller.env)
+      autoshud_step2_source('Rfunction/FLDAS_RDS2csv.R', env = caller.env)
     } else if (xfg$iforcing == 0.3) {
       xfg$res <- autoshud_ldas_resolution(xfg$iforcing)
+      sync_caller_inputs()
       message('USING GLDA FORCING DATA')
-      autoshud_step2_source('Rfunction/GLDAS_nc2RDS.R', env = environment())
-      autoshud_step2_source('Rfunction/GLDAS_RDS2csv.R', env = environment())
+      autoshud_step2_source('Rfunction/GLDAS_nc2RDS.R', env = caller.env)
+      autoshud_step2_source('Rfunction/GLDAS_RDS2csv.R', env = caller.env)
     } else if (xfg$iforcing == 0.4) {
       xfg$res <- autoshud_ldas_resolution(xfg$iforcing)
+      sync_caller_inputs()
       message('USING NLDAS FORCING DATA')
       autoshud_prepare_legacy_ldas_coverage(xfg, pd.gcs, pd.pcs, res = xfg$res)
-      autoshud_step2_source('Rfunction/NLDAS_nc2RDS.R', env = environment())
-      autoshud_step2_source('Rfunction/NLDAS_RDS2csv.R', env = environment())
+      autoshud_step2_source('Rfunction/NLDAS_nc2RDS.R', env = caller.env)
+      autoshud_step2_source('Rfunction/NLDAS_RDS2csv.R', env = caller.env)
     } else if (xfg$iforcing == 0.5) {
       message('USING CMFD FORCING DATA')
-      autoshud_step2_source('Rfunction/CMFD_NC2RDS.R', env = environment())
-      autoshud_step2_source('Rfunction/CMFD_RDS2csv.R', env = environment())
+      autoshud_step2_source('Rfunction/CMFD_NC2RDS.R', env = caller.env)
+      autoshud_step2_source('Rfunction/CMFD_RDS2csv.R', env = caller.env)
     } else if (xfg$iforcing == 0.6) {
       message('USING CMIP6 FORCING DATA')
-      autoshud_step2_source('Rfunction/CMIP6_NCtoRDS.R', env = environment())
-      autoshud_step2_source('Rfunction/CMIP6_RDStoCSV.R', env = environment())
+      autoshud_step2_source('Rfunction/CMIP6_NCtoRDS.R', env = caller.env)
+      autoshud_step2_source('Rfunction/CMIP6_RDStoCSV.R', env = caller.env)
     } else if (xfg$iforcing == 0.7) {
       message('USING ERA5 FORCING DATA')
       era5.converter <- getOption('autoshud.era5.converter')

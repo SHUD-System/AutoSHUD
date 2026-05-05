@@ -110,16 +110,67 @@ hash_files <- function(files) {
   stats::setNames(vapply(files, hash_file, character(1)), basename(files))
 }
 
-expected_step3_site_ids <- function(sp.forc) {
+autoshud_step3_validate_forcing_ids <- function(id, forcing.dir = NULL) {
+  id <- as.character(id)
+  bad <- rep(FALSE, length(id))
+  reason <- rep('', length(id))
+
+  flag <- function(x) {
+    x[is.na(x)] <- FALSE
+    x
+  }
+  mark <- function(idx, why) {
+    idx <- flag(idx)
+    if (!any(idx)) return(invisible(NULL))
+    reason[idx & !bad] <<- why
+    bad[idx] <<- TRUE
+    invisible(NULL)
+  }
+
+  mark(is.na(id) | !nzchar(trimws(id)), 'empty')
+  mark(grepl('[[:cntrl:]]', id), 'control character')
+  mark(grepl('[/\\\\]', id), 'path separator')
+  mark(id %in% c('.', '..') | grepl('(^|[/\\\\])\\.\\.($|[/\\\\])', id),
+       "'..' path component")
+  mark(grepl('^[[:alpha:]][[:alnum:].+-]*:', id) | startsWith(id, '~'),
+       'absolute or path-like form')
+
+  filename <- paste0(id, '.csv')
+  mark(dirname(filename) != '.' | basename(filename) != filename,
+       'escapes forcing directory')
+  if (!is.null(forcing.dir) && length(forcing.dir) > 0 &&
+      !is.na(forcing.dir[[1]]) && nzchar(forcing.dir[[1]])) {
+    root <- sub('/+$', '', normalizePath(forcing.dir[[1]], winslash = '/',
+                                         mustWork = FALSE))
+    candidate <- sub('/+$', '', normalizePath(file.path(root, filename),
+                                              winslash = '/', mustWork = FALSE))
+    mark(!(identical(dirname(candidate), root) |
+             startsWith(candidate, paste0(root, '/'))),
+         'escapes forcing directory')
+  }
+
+  if (any(bad)) {
+    details <- paste(utils::head(paste0(encodeString(id[bad], quote = "'"),
+                                        ' (', reason[bad], ')'), 5),
+                     collapse = ', ')
+    if (sum(bad) > 5) details <- paste0(details, ', ...')
+    stop('Unsafe forcing/meteoCov ID(s): ', details,
+         '. IDs must be plain file names inside the forcing directory.',
+         call. = FALSE)
+  }
+  id
+}
+
+expected_step3_site_ids <- function(sp.forc, forcing.dir = NULL) {
   if ("ID" %in% names(sp.forc)) {
     id <- as.character(sp.forc$ID)
     fallback <- paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
     use.fallback <- is.na(id) | !nzchar(id)
     id[use.fallback] <- fallback[use.fallback]
-    id
   } else {
-    paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
+    id <- paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
   }
+  autoshud_step3_validate_forcing_ids(id, forcing.dir = forcing.dir)
 }
 
 read_tsd_file <- function(file) {
@@ -218,7 +269,7 @@ write_test_meteo_cov <- function(file, id, lon = -999, lat = -999, crs = 4326) {
 
 run_classic_step3_metadata <- function(xfg, pd.pcs, forc.file) {
   sp.forc <- sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
-  sp.forc$ID <- expected_step3_site_ids(sp.forc)
+  sp.forc$ID <- expected_step3_site_ids(sp.forc, forcing.dir = xfg$dir$forc)
   sp.c <- sf::st_centroid(sp.forc)["ID"]
   dem <- raster::raster(nrows = 4, ncols = 4, xmn = -180, xmx = 180, ymn = -90, ymx = 90,
                         crs = sp::CRS("+init=epsg:4326"))
@@ -234,6 +285,15 @@ run_classic_step3_metadata <- function(xfg, pd.pcs, forc.file) {
                     startdate = "20010101", file = forc.file)
   forc.file
 }
+
+test_that("Step3 forcing ID validation rejects unsafe meteoCov IDs", {
+  forc.dir <- tempfile("forcing-dir-")
+  valid <- c("X-105Y40", "X116.25Y40", "site_1-name.v2")
+  expect_equal(autoshud_step3_validate_forcing_ids(valid, forcing.dir = forc.dir), valid)
+  sp.forc <- data.frame(ID = "../outside", xcenter = -105, ycenter = 40)
+  expect_error(expected_step3_site_ids(sp.forc, forcing.dir = forc.dir),
+               "Unsafe forcing/meteoCov ID")
+})
 
 run_synthetic_acceptance_case <- function(case.name, tmp, bbox, lon, lat, lon.mode) {
   ctx <- make_era5_context(tmp, bbox = bbox,
@@ -312,6 +372,39 @@ test_that("Step2 dispatch calls ERA5 converter only", {
   expect_equal(calls, 1L)
 })
 
+test_that("Step2 legacy dispatch sources scripts in caller environment", {
+  source("Rfunction/Step2_ForcingDispatch.R")
+  run_case <- function(iforcing, expected.files) {
+    caller <- new.env(parent = globalenv())
+    caller$dir.predata <- tempfile("predata-")
+    caller$dir.forc <- tempfile("forc-")
+    caller$years <- 2001:2002
+    caller$prjname <- paste0("legacy-", iforcing)
+    caller$xfg <- list(iforcing = iforcing)
+    caller$pd.gcs <- list(meteoCov = tempfile("gcs-"))
+    caller$pd.pcs <- list(meteoCov = tempfile("pcs-"))
+    calls <- character()
+    old.source <- getOption("autoshud.step2.source")
+    options(autoshud.step2.source = function(file, env) {
+      calls <<- c(calls, file)
+      expect_true(identical(env, caller), paste(file, "must receive caller environment"))
+      expect_equal(get("dir.predata", envir = env), caller$dir.predata)
+      expect_equal(get("dir.forc", envir = env), caller$dir.forc)
+      expect_equal(get("years", envir = env), caller$years)
+      expect_equal(get("prjname", envir = env), caller$prjname)
+      expect_equal(get("xfg", envir = env)$iforcing, iforcing)
+      invisible(TRUE)
+    })
+    tryCatch(
+      evalq(autoshud_step2_dispatch_forcing(xfg, pd.gcs, pd.pcs), envir = caller),
+      finally = restore_option("autoshud.step2.source", old.source)
+    )
+    expect_equal(calls, expected.files)
+  }
+  run_case(0.2, c("Rfunction/FLDAS_nc2RDS.R", "Rfunction/FLDAS_RDS2csv.R"))
+  run_case(0.6, c("Rfunction/CMIP6_NCtoRDS.R", "Rfunction/CMIP6_RDStoCSV.R"))
+})
+
 if (requireNamespace("sf", quietly = TRUE)) {
   test_that("Step2 NLDAS dispatch prepares legacy meteo coverage before converter", {
     source("Rfunction/Step2_ForcingDispatch.R")
@@ -347,8 +440,33 @@ if (requireNamespace("sf", quietly = TRUE)) {
     expect_true("Rfunction/NLDAS_nc2RDS.R" %in% calls)
     expect_true(!("Rfunction/ERA5_NC2CSV.R" %in% calls), "NLDAS must not invoke ERA5 converter")
   })
+
+  test_that("Legacy LDAS fishnet max cells preflight stops before meteoCov output", {
+    source("Rfunction/Step2_ForcingDispatch.R")
+    tmp <- tempfile("ldas-max-cells-")
+    dir.create(tmp)
+    wbd <- make_wbd(file.path(tmp, "gcs", "wbd_buf.shp"),
+                    bbox = c(xmin = -105, xmax = -103, ymin = 39, ymax = 41))
+    pd.gcs <- list(wbd.buf = wbd,
+                   meteoCov = file.path(tmp, "gcs", "meteoCov.shp"))
+    pd.pcs <- list(meteoCov = file.path(tmp, "pcs", "meteoCov.shp"))
+    xfg <- list(iforcing = 0.4, crs.gcs = sf::st_crs(4326),
+                crs.pcs = sf::st_crs(4326)$wkt)
+    old.max <- getOption("autoshud.ldas.max.cells")
+    options(autoshud.ldas.max.cells = 1)
+    tryCatch(
+      expect_error(autoshud_prepare_legacy_ldas_coverage(xfg, pd.gcs, pd.pcs, res = 0.125),
+                   "LDAS fishnet.*max cells"),
+      finally = restore_option("autoshud.ldas.max.cells", old.max)
+    )
+    expect_true(length(shapefile_sidecars(pd.gcs$meteoCov)) == 0,
+                "GCS meteoCov must not be written after fishnet preflight failure")
+    expect_true(length(shapefile_sidecars(pd.pcs$meteoCov)) == 0,
+                "PCS meteoCov must not be written after fishnet preflight failure")
+  })
 } else {
   skip("Step2 NLDAS dispatch prepares legacy meteo coverage before converter", "requires sf")
+  skip("Legacy LDAS fishnet max cells preflight stops before meteoCov output", "requires sf")
 }
 
 test_that("ERA5 grid selection uses bbox and buffer", {
@@ -387,6 +505,23 @@ test_that("ERA5 grid selection preflights max sites before grid construction", {
   )
   expect_true(grepl("4000000", msg, fixed = TRUE),
               "selection error must report full candidate count without building it")
+})
+
+test_that("ERA5 new output path accepts normalized relative root and rejects escapes", {
+  tmp <- tempfile("era5-relative-root-", tmpdir = ".")
+  dir.create(tmp)
+  on.exit(unlink(tmp, recursive = TRUE, force = TRUE), add = TRUE)
+  dir.create(file.path(tmp, "root", "out"), recursive = TRUE)
+  root <- file.path(tmp, "root", "..", "root", "out")
+  leaf <- file.path(root, "nested", "new-file.csv")
+  candidate <- era5_validate_new_path_under_root(leaf, root, "relative output")
+  expect_equal(basename(candidate), "new-file.csv")
+  expect_true(grepl("/root/out/nested/new-file\\.csv$", candidate),
+              "nonexistent leaf under normalized relative root must be accepted")
+  expect_error(
+    era5_validate_new_path_under_root(file.path(root, "..", "outside.csv"), root, "relative output"),
+    "outside output root"
+  )
 })
 
 test_that("ERA5 unit conversions produce SHUD columns", {
@@ -835,9 +970,13 @@ if (all(have[c("ncdf4", "sf", "xts", "rSHUD", "raster", "sp")])) {
     sf::st_write(sp.forc, dsn = pd.pcs$meteoCov, driver = "ESRI Shapefile",
                  delete_dsn = TRUE, quiet = TRUE)
     sp.forc <- sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
-    expected.ids <- expected_step3_site_ids(sp.forc)
+    expected.ids <- expected_step3_site_ids(sp.forc, forcing.dir = forc.dir)
     expect_equal(expected.ids[1], "custom_site_1")
     expect_equal(expected.ids[-1], paste0("X", sp.forc$xcenter[-1], "Y", sp.forc$ycenter[-1]))
+    sp.bad <- sp.forc
+    sp.bad$ID[1] <- "../outside"
+    expect_error(expected_step3_site_ids(sp.bad, forcing.dir = forc.dir),
+                 "Unsafe forcing/meteoCov ID")
     sp.forc$ID <- expected.ids
     sp.c <- sf::st_centroid(sp.forc)["ID"]
     dem <- raster::raster(nrows = 4, ncols = 4, xmn = -105.5, xmx = -104.5, ymn = 39.5, ymx = 40.5,
