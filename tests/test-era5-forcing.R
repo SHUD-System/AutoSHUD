@@ -348,13 +348,19 @@ if (requireNamespace("sf", quietly = TRUE) && requireNamespace("rSHUD", quietly 
       "Landuse 1.1",
       paste("fn.landuse", file.path(tmp, "landuse.tif")),
       "QuickMode 1",
-      "DistBuffer 1000"
+      "DistBuffer 1000",
+      "local.forcing.max.bytes 12345",
+      "local.forcing.max.rows 678",
+      "local.forcing.max.cols 9"
     ), prj)
     xfg <- read.prj(prj)
     expect_equal(xfg$iforcing, 0.7)
     expect_equal(xfg$dir.era5, "/tmp/ldas")
     expect_equal(xfg$era5$lon.mode, "auto")
     expect_equal(xfg$era5$buffer.deg, 0)
+    expect_equal(xfg$para$local.forcing.max.bytes, 12345)
+    expect_equal(xfg$para$local.forcing.max.rows, 678)
+    expect_equal(xfg$para$local.forcing.max.cols, 9)
   })
 } else {
   skip("ReadProject parses ERA5 defaults", "requires sf and rSHUD")

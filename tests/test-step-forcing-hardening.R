@@ -279,6 +279,49 @@ if (have_sf) {
     expect_equal(hash_file(source.csv), source.hash)
   })
 
+  test_that("Step3 local forcing rejects one-row CSV for multi-day window before publish", {
+    tmp <- tempfile("local-forcing-one-row-")
+    forc.dir <- file.path(tmp, "forcing")
+    output.csv <- file.path(forc.dir, "site_one.csv")
+    write_tsd_fixture(output.csv, as.Date("2001-01-01"))
+    before.hash <- hash_file(output.csv)
+
+    sp.forc <- sf::st_as_sf(
+      data.frame(ID = 1L, Filename = "site_one.csv", x = 0, y = 0),
+      coords = c("x", "y"), crs = 4326
+    )
+    xfg <- list(years = 2001, dir = list(forc = forc.dir),
+                para = list(STARTDAY = 0, ENDDAY = 4))
+    expect_error(
+      autoshud_step3_enforce_local_forcing_window(sp.forc, xfg = xfg,
+                                                  years = xfg$years,
+                                                  forcing.dir = forc.dir),
+      "one row.*configured forcing window"
+    )
+    expect_equal(hash_file(output.csv), before.hash)
+  })
+
+  test_that("Step3 local forcing accepts one-row CSV for one-day window", {
+    tmp <- tempfile("local-forcing-one-day-")
+    forc.dir <- file.path(tmp, "forcing")
+    output.csv <- file.path(forc.dir, "site_day.csv")
+    write_tsd_fixture(output.csv, as.Date("2001-01-01"))
+
+    sp.forc <- sf::st_as_sf(
+      data.frame(ID = 1L, Filename = "site_day.csv", x = 0, y = 0),
+      coords = c("x", "y"), crs = 4326
+    )
+    xfg <- list(years = 2001, dir = list(forc = forc.dir),
+                para = list(STARTDAY = 0, ENDDAY = 0))
+    autoshud_step3_enforce_local_forcing_window(sp.forc, xfg = xfg,
+                                                years = xfg$years,
+                                                forcing.dir = forc.dir)
+    out <- read_tsd_file(output.csv)
+    expect_equal(nrow(out), 1L)
+    expect_equal(out$Time_interval[[1]], 0)
+    expect_equal(attr(out, "tsd_header")[[3]], "20010101")
+  })
+
   test_that("Step3 local forcing rejects symlinked output CSV", {
     tmp <- tempfile("local-forcing-symlink-")
     forc.dir <- file.path(tmp, "forcing")

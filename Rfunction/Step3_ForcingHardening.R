@@ -463,8 +463,17 @@ autoshud_step3_stage_windowed_tsd <- function(file, staged.file, window,
            call. = FALSE)
     }
   } else {
-    step <- as.numeric(window$end.exclusive) - as.numeric(window$start)
-    tol <- 1
+    step <- tsd$unit.sec
+    tol <- max(1, abs(step) * 1e-6)
+    window.duration <- as.numeric(window$end.exclusive) - as.numeric(window$start)
+    if (!is.finite(window.duration) || window.duration > step + tol) {
+      stop("Local forcing CSV has one row but configured forcing window requires more than one TSD timestep for ",
+           tsd$label, ".", call. = FALSE)
+    }
+    if (window.duration < step - tol) {
+      stop("Local forcing CSV has one row but configured forcing window is shorter than one TSD timestep for ",
+           tsd$label, ".", call. = FALSE)
+    }
   }
   start.num <- as.numeric(window$start)
   end.num <- as.numeric(window$end.exclusive)
