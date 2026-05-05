@@ -63,9 +63,10 @@
 - [x] `Rfunction/ERA5_NC2CSV.R` scenario: malformed time error.
   - Input: synthetic NetCDF file with unparseable, duplicated, or non-monotonic time metadata.
   - Expected output: converter stops before writing CSV files and reports that ERA5 time metadata is malformed.
-- [x] End-to-end scenario: classic Step1-Step3 ERA5 path.
-  - Input: small fixture project with watershed GIS and synthetic ERA5 NetCDF data for one or two days.
-  - Expected output: Step2 writes forcing CSVs and meteo shapefiles; Step3 builds forcing coverage and model forcing metadata without requiring external ERA5 preprocessing.
+- [x] Acceptance scenario: classic Step2 dispatch plus Step3 ERA5 forcing metadata path using Step1-style fixture artifacts.
+  - Input: small fixture project with prebuilt watershed GIS artifacts and synthetic ERA5 NetCDF data for one or two days.
+  - Expected output: Step2 writes forcing CSVs and meteo shapefiles; Step3-style forcing coverage and model forcing metadata reference emitted CSV basenames without requiring external ERA5 preprocessing.
+  - Scope note: the test harness does not run the full Step1 terrain preprocessing workflow; it provides the Step1 output artifacts needed by the forcing path.
 
 ## Phase 7 Review Fixes
 
@@ -73,3 +74,9 @@
   - Regression: two synthetic daily files with reordered longitude coordinates fail fast with a `longitude grid mismatch` error naming the second file and do not publish final outputs.
 - [x] Stage ERA5 CSV and meteoCov shapefile outputs in the run temp directory and publish final meteoCov only after staged CSV publication succeeds.
   - Regression: an internal test-only copy hook injects final CSV publish failure and asserts existing final `meteoCov` shapefiles remain unchanged.
+- [x] Harden ERA5 discovery and final output publication.
+  - Regression: recursive NetCDF discovery rejects symlink files and enforces `era5.max.files`.
+  - Regression: non-finite raw ERA5 values fail before final CSV/meteoCov publication.
+  - Regression: injected shapefile publish failure after CSV staging restores existing final CSVs and both `meteoCov` shapefiles.
+- [x] Preserve Step3 meteoCov `ID` values when present.
+  - Regression: Step3-style metadata uses a custom meteoCov `ID` basename instead of reconstructing `X<xcenter>Y<ycenter>`.

@@ -28,6 +28,8 @@ era5.file.pattern ERA5_{year}*.nc
 era5.max.sites 50000
 era5.max.timesteps 200000
 era5.max.vars 16
+era5.max.files 10000
+era5.max.discovery.depth Inf
 era5.max.bytes 1073741824
 era5.max.read.bytes 67108864
 era5.time.chunk 8192
@@ -41,6 +43,11 @@ era5.time.chunk 8192
 - `era5.max.sites`, `era5.max.timesteps`, `era5.max.vars`, and
   `era5.max.bytes`: size guards for selected site/time/variable data before
   NetCDF reads are published to CSV. Defaults are shown above.
+- `era5.max.files`: maximum NetCDF files allowed during recursive discovery.
+  Discovered NetCDF symlinks and paths resolving outside `dir.era5` are rejected
+  by default.
+- `era5.max.discovery.depth`: optional recursive discovery depth below
+  `dir.era5`; `0` means only direct children, `1` means one subdirectory level.
 - `era5.max.read.bytes` and `era5.time.chunk`: per-point time-series read
   guards. The converter reads exact selected grid points in time chunks instead
   of the full enclosing lon/lat rectangle.
@@ -90,7 +97,8 @@ as a new cycle, clips negative increments to zero, and scales precipitation to
 
 ## Acceptance Evidence
 
-`tests/test-era5-forcing.R` includes named synthetic acceptance cases:
+`tests/test-era5-forcing.R` includes named synthetic acceptance cases and
+rollback/security regressions:
 
 - `case1-US`: watershed near `-105, 40` with ERA5 longitudes in `0..360`
   notation. The test runs the real Step2 forcing dispatcher with `Forcing 0.7`,
@@ -104,3 +112,6 @@ Step1 depends on broader GIS/DEM preprocessing inputs that are not meaningful
 for these synthetic NetCDF fixtures. The acceptance cases instead provide the
 Step1 output artifacts needed by forcing conversion, then verify Step2 and the
 classic Step3 forcing metadata path without external ERA5 preprocessing.
+The harness also verifies NetCDF discovery symlink rejection, discovery
+`era5.max.files`, finite-value validation, and transactional publication
+rollback for CSV plus `meteoCov` outputs.

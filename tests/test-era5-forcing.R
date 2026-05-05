@@ -74,6 +74,36 @@ restore_option <- function(name, value) {
   do.call(options, opts)
 }
 
+shapefile_sidecars <- function(path) {
+  dir <- dirname(path)
+  stem <- tools::file_path_sans_ext(basename(path))
+  if (!dir.exists(dir)) return(character())
+  files <- list.files(dir, all.files = TRUE, no.. = TRUE, full.names = TRUE)
+  files[startsWith(basename(files), paste0(stem, "."))]
+}
+
+hash_file <- function(file) {
+  if (requireNamespace("tools", quietly = TRUE) &&
+      exists("md5sum", where = asNamespace("tools"), mode = "function")) {
+    unname(tools::md5sum(file))
+  } else {
+    paste(readBin(file, "raw", n = file.info(file)$size), collapse = "")
+  }
+}
+
+hash_files <- function(files) {
+  files <- sort(files)
+  stats::setNames(vapply(files, hash_file, character(1)), basename(files))
+}
+
+expected_step3_site_ids <- function(sp.forc) {
+  if ("ID" %in% names(sp.forc) && any(nzchar(as.character(sp.forc$ID)))) {
+    as.character(sp.forc$ID)
+  } else {
+    paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
+  }
+}
+
 read_tsd_file <- function(file) {
   lines <- readLines(file, warn = FALSE)
   header <- strsplit(lines[[2]], "\t")[[1]]
@@ -170,7 +200,7 @@ write_test_meteo_cov <- function(file, id, lon = -999, lat = -999, crs = 4326) {
 
 run_classic_step3_metadata <- function(xfg, pd.pcs, forc.file) {
   sp.forc <- sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
-  sp.forc$ID <- paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
+  sp.forc$ID <- expected_step3_site_ids(sp.forc)
   sp.c <- sf::st_centroid(sp.forc)["ID"]
   dem <- raster::raster(nrows = 4, ncols = 4, xmn = -180, xmx = 180, ymn = -90, ymx = 90,
                         crs = sp::CRS("+init=epsg:4326"))
@@ -367,6 +397,48 @@ if (all(have[c("ncdf4", "sf", "xts")])) {
     expect_true(!dir.exists(ctx$forc.dir) || length(list.files(ctx$forc.dir, pattern = "\\.csv$")) == 0)
   })
 
+  test_that("ERA5 discovery rejects symlink NetCDF paths", {
+    tmp <- tempfile("era5-discovery-symlink-")
+    dir.create(tmp)
+    root <- file.path(tmp, "era5")
+    outside <- file.path(tmp, "outside")
+    dir.create(root, recursive = TRUE)
+    dir.create(outside, recursive = TRUE)
+    real <- make_nc(file.path(outside, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1,
+                    var.values = make_var_values(c(1, 1, 2)))
+    link <- file.path(root, "ERA5_20010101.nc")
+    if (skip_if(!file.symlink(real, link),
+                "ERA5 discovery rejects symlink NetCDF paths",
+                "test platform does not support file.symlink")) return(invisible(TRUE))
+    expect_error(era5_discover_files(root, 2001), "symlink")
+  })
+
+  test_that("ERA5 discovery enforces max files", {
+    tmp <- tempfile("era5-discovery-max-files-")
+    dir.create(tmp)
+    root <- file.path(tmp, "era5")
+    make_nc(file.path(root, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2)))
+    make_nc(file.path(root, "ERA5_20010102.nc"), c(255.00), c(40.00), 2:3,
+            var.values = make_var_values(c(1, 1, 2)))
+    expect_error(era5_discover_files(root, 2001, limits = era5_read_limits(list(max.files = 1))),
+                 "era5.max.files")
+  })
+
+  test_that("ERA5 discovery depth allows direct children at depth zero", {
+    tmp <- tempfile("era5-discovery-depth-")
+    dir.create(tmp)
+    root <- file.path(tmp, "era5")
+    make_nc(file.path(root, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2)))
+    dir.create(file.path(root, "nested"), recursive = TRUE)
+    make_nc(file.path(root, "nested", "ERA5_20010102.nc"), c(255.00), c(40.00), 2:3,
+            var.values = make_var_values(c(1, 1, 2)))
+    files <- era5_discover_files(root, 2001, limits = era5_read_limits(list(max.discovery.depth = 0)))
+    expect_equal(length(files), 1L)
+    expect_equal(basename(files), "ERA5_20010101.nc")
+  })
+
   test_that("ERA5 two-file cumulative tp and ssr boundaries handle non-reset", {
     tmp <- tempfile("era5-boundary-nonreset-")
     dir.create(tmp)
@@ -425,22 +497,87 @@ if (all(have[c("ncdf4", "sf", "xts")])) {
     vals <- make_var_values(c(1, 1, 2), tp = c(0.001, 0.002), ssr = c(3600, 7200))
     make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1, var.values = vals)
 
-    old.copy <- getOption("autoshud.era5.file.copy")
-    options(autoshud.era5.file.copy = function(from, to, overwrite = TRUE) {
+    old.rename <- getOption("autoshud.era5.file.rename")
+    options(autoshud.era5.file.rename = function(from, to) {
       fail <- grepl("\\.csv$", basename(to)) & !startsWith(basename(to), ".")
       out <- rep(FALSE, length(to))
       if (any(!fail)) {
-        out[!fail] <- file.copy(from[!fail], to[!fail], overwrite = overwrite)
+        out[!fail] <- file.rename(from[!fail], to[!fail])
       }
       out
     })
 
     tryCatch(
       expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs), "failed to publish forcing CSV files"),
-      finally = restore_option("autoshud.era5.file.copy", old.copy)
+      finally = restore_option("autoshud.era5.file.rename", old.rename)
     )
     final.csv <- list.files(ctx$forc.dir, pattern = "\\.csv$", full.names = TRUE)
     expect_equal(length(final.csv), 0L)
+    g <- sf::st_read(ctx$pd.gcs$meteoCov, quiet = TRUE)
+    p <- sf::st_read(ctx$pd.pcs$meteoCov, quiet = TRUE)
+    expect_equal(g$ID, "OLD_GCS")
+    expect_equal(p$ID, "OLD_PCS")
+  })
+
+  test_that("ERA5 shapefile publish failure rolls back CSV and meteoCov finals", {
+    tmp <- tempfile("era5-shp-publish-failure-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    existing.csv <- file.path(ctx$forc.dir, "X-105Y40.csv")
+    dir.create(ctx$forc.dir, recursive = TRUE)
+    writeLines(c("old csv", "keep"), existing.csv)
+    old.csv.hash <- hash_file(existing.csv)
+    write_test_meteo_cov(ctx$pd.gcs$meteoCov, "OLD_GCS")
+    write_test_meteo_cov(ctx$pd.pcs$meteoCov, "OLD_PCS")
+    old.gcs.hash <- hash_files(shapefile_sidecars(ctx$pd.gcs$meteoCov))
+    old.pcs.hash <- hash_files(shapefile_sidecars(ctx$pd.pcs$meteoCov))
+    vals <- make_var_values(c(1, 1, 2), tp = c(0.001, 0.002), ssr = c(3600, 7200))
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1, var.values = vals)
+
+    old.rename <- getOption("autoshud.era5.file.rename")
+    options(autoshud.era5.file.rename = function(from, to) {
+      fail <- grepl("era5_publish", basename(from)) &
+        grepl("meteoCov\\.shp$", basename(to)) & !startsWith(basename(to), ".")
+      out <- rep(FALSE, length(to))
+      if (any(!fail)) {
+        out[!fail] <- file.rename(from[!fail], to[!fail])
+      }
+      out
+    })
+
+    tryCatch(
+      expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs), "failed to publish GCS meteoCov"),
+      finally = {
+        restore_option("autoshud.era5.file.rename", old.rename)
+        stale <- list.files(dirname(ctx$pd.gcs$meteoCov), pattern = "era5_publish",
+                            all.files = TRUE, full.names = TRUE)
+        if (length(stale)) unlink(stale, force = TRUE)
+      }
+    )
+    expect_equal(hash_file(existing.csv), old.csv.hash)
+    expect_equal(hash_files(shapefile_sidecars(ctx$pd.gcs$meteoCov)), old.gcs.hash)
+    expect_equal(hash_files(shapefile_sidecars(ctx$pd.pcs$meteoCov)), old.pcs.hash)
+    g <- sf::st_read(ctx$pd.gcs$meteoCov, quiet = TRUE)
+    p <- sf::st_read(ctx$pd.pcs$meteoCov, quiet = TRUE)
+    expect_equal(g$ID, "OLD_GCS")
+    expect_equal(p$ID, "OLD_PCS")
+  })
+
+  test_that("ERA5 non-finite raw values fail before final outputs publish", {
+    tmp <- tempfile("era5-nonfinite-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    existing.csv <- file.path(ctx$forc.dir, "X-105Y40.csv")
+    dir.create(ctx$forc.dir, recursive = TRUE)
+    writeLines(c("old csv", "keep"), existing.csv)
+    old.csv.hash <- hash_file(existing.csv)
+    write_test_meteo_cov(ctx$pd.gcs$meteoCov, "OLD_GCS")
+    write_test_meteo_cov(ctx$pd.pcs$meteoCov, "OLD_PCS")
+    vals <- make_var_values(c(1, 1, 2), tp = c(0.001, 0.002), ssr = c(3600, 7200))
+    vals$t2m[2] <- NaN
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1, var.values = vals)
+    expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs), "non-finite raw ERA5 value")
+    expect_equal(hash_file(existing.csv), old.csv.hash)
     g <- sf::st_read(ctx$pd.gcs$meteoCov, quiet = TRUE)
     p <- sf::st_read(ctx$pd.pcs$meteoCov, quiet = TRUE)
     expect_equal(g$ID, "OLD_GCS")
@@ -548,7 +685,11 @@ if (all(have[c("ncdf4", "sf", "xts", "rSHUD", "raster", "sp")])) {
                 crs.pcs = sf::st_crs(4326)$wkt, crs.gcs = sf::st_crs(4326))
     era5_nc2csv(xfg, pd.gcs, pd.pcs)
     sp.forc <- sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
-    sp.forc$ID <- paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
+    sp.forc$ID <- paste0("custom_site_", seq_len(nrow(sp.forc)))
+    sf::st_write(sp.forc, dsn = pd.pcs$meteoCov, driver = "ESRI Shapefile",
+                 delete_dsn = TRUE, quiet = TRUE)
+    sp.forc <- sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
+    sp.forc$ID <- expected_step3_site_ids(sp.forc)
     sp.c <- sf::st_centroid(sp.forc)["ID"]
     dem <- raster::raster(nrows = 4, ncols = 4, xmn = -105.5, xmx = -104.5, ymn = 39.5, ymx = 40.5,
                           crs = sp::CRS("+init=epsg:4326"))
@@ -565,7 +706,7 @@ if (all(have[c("ncdf4", "sf", "xts", "rSHUD", "raster", "sp")])) {
                       startdate = "20010101", file = forc.file)
     expect_true(file.exists(forc.file))
     forc.lines <- readLines(forc.file, warn = FALSE)
-    expect_true(any(grepl("X-105Y40.csv", forc.lines, fixed = TRUE)))
+    expect_true(any(grepl("custom_site_1.csv", forc.lines, fixed = TRUE)))
   })
 
   test_that("Synthetic case1-US acceptance uses real Step2 dispatch and Step3 metadata", {

@@ -62,6 +62,8 @@ read.prj <- function(fn.prj){
   era5.max.sites = getVAL(xcfg, 'era5.max.sites', TRUE)
   era5.max.timesteps = getVAL(xcfg, 'era5.max.timesteps', TRUE)
   era5.max.vars = getVAL(xcfg, 'era5.max.vars', TRUE)
+  era5.max.files = getVAL(xcfg, 'era5.max.files', TRUE)
+  era5.max.discovery.depth = getVAL(xcfg, 'era5.max.discovery.depth')
   era5.max.bytes = getVAL(xcfg, 'era5.max.bytes', TRUE)
   era5.max.read.bytes = getVAL(xcfg, 'era5.max.read.bytes', TRUE)
   era5.time.chunk = getVAL(xcfg, 'era5.time.chunk', TRUE)
@@ -240,6 +242,8 @@ read.prj <- function(fn.prj){
       'max.sites' = era5.max.sites,
       'max.timesteps' = era5.max.timesteps,
       'max.vars' = era5.max.vars,
+      'max.files' = era5.max.files,
+      'max.discovery.depth' = era5.max.discovery.depth,
       'max.bytes' = era5.max.bytes,
       'max.read.bytes' = era5.max.read.bytes,
       'time.chunk' = era5.time.chunk

@@ -129,8 +129,12 @@ if( xfg$iforcing < 1 ){
   }else{
     sp.forc = sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
   }
-  ID = paste0('X', (sp.forc$xcenter),
-              'Y', (sp.forc$ycenter))
+  if ('ID' %in% names(sp.forc) && any(nzchar(as.character(sp.forc$ID)))) {
+    ID = as.character(sp.forc$ID)
+  } else {
+    ID = paste0('X', (sp.forc$xcenter),
+                'Y', (sp.forc$ycenter))
+  }
   sp.c = sf::st_centroid(sp.forc)
   sp.c$ID = ID
   sp.c = sp.c["ID"]

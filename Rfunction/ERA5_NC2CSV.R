@@ -7,6 +7,8 @@ ERA5_DEFAULT_LIMITS <- list(
   max.sites = 50000,
   max.timesteps = 200000,
   max.vars = 16,
+  max.files = 10000,
+  max.discovery.depth = Inf,
   max.bytes = 1024^3,
   max.read.bytes = 64 * 1024^2,
   time.chunk = 8192
@@ -83,6 +85,38 @@ era5_positive_number <- function(value, name, default, integer = FALSE) {
   value
 }
 
+era5_logical_value <- function(value, name, default = FALSE) {
+  if (is.null(value) || length(value) == 0 || all(is.na(value))) {
+    return(default)
+  }
+  value <- value[[1]]
+  if (is.logical(value)) {
+    return(isTRUE(value))
+  }
+  if (is.numeric(value)) {
+    if (is.na(value)) return(default)
+    return(!identical(as.numeric(value), 0))
+  }
+  value <- tolower(trimws(as.character(value)))
+  if (value %in% c("true", "t", "yes", "y", "1", "on")) return(TRUE)
+  if (value %in% c("false", "f", "no", "n", "0", "off")) return(FALSE)
+  era5_stop(name, " must be true/false.")
+}
+
+era5_discovery_depth_value <- function(value, name, default) {
+  if (is.null(value) || length(value) == 0 || all(is.na(value))) {
+    return(default)
+  }
+  value <- suppressWarnings(as.numeric(value[[1]]))
+  if (is.infinite(value) && value > 0) {
+    return(Inf)
+  }
+  if (!is.finite(value) || value < 0) {
+    era5_stop(name, " must be a non-negative number or Inf.")
+  }
+  as.integer(floor(value))
+}
+
 era5_read_limits <- function(cfg = NULL) {
   get_limit <- function(key, default, integer = FALSE) {
     value <- era5_config_value(cfg, key)
@@ -91,13 +125,32 @@ era5_read_limits <- function(cfg = NULL) {
     }
     era5_positive_number(value, paste0("era5.", key), default, integer = integer)
   }
+  get_bool <- function(key, default = FALSE) {
+    value <- era5_config_value(cfg, key)
+    if (is.null(value)) {
+      value <- getOption(paste0("autoshud.era5.", key), NULL)
+    }
+    era5_logical_value(value, paste0("era5.", key), default = default)
+  }
+  get_depth <- function(key, default) {
+    value <- era5_config_value(cfg, key)
+    if (is.null(value)) {
+      value <- getOption(paste0("autoshud.era5.", key), NULL)
+    }
+    era5_discovery_depth_value(value, paste0("era5.", key), default)
+  }
   list(
     max.sites = get_limit("max.sites", ERA5_DEFAULT_LIMITS$max.sites, integer = TRUE),
     max.timesteps = get_limit("max.timesteps", ERA5_DEFAULT_LIMITS$max.timesteps, integer = TRUE),
     max.vars = get_limit("max.vars", ERA5_DEFAULT_LIMITS$max.vars, integer = TRUE),
+    max.files = get_limit("max.files", ERA5_DEFAULT_LIMITS$max.files, integer = TRUE),
+    max.discovery.depth = get_depth("max.discovery.depth",
+                                    ERA5_DEFAULT_LIMITS$max.discovery.depth),
     max.bytes = get_limit("max.bytes", ERA5_DEFAULT_LIMITS$max.bytes),
     max.read.bytes = get_limit("max.read.bytes", ERA5_DEFAULT_LIMITS$max.read.bytes),
-    time.chunk = get_limit("time.chunk", ERA5_DEFAULT_LIMITS$time.chunk, integer = TRUE)
+    time.chunk = get_limit("time.chunk", ERA5_DEFAULT_LIMITS$time.chunk, integer = TRUE),
+    allow.symlinks = get_bool("allow.symlinks", FALSE),
+    allow.outside.root = get_bool("allow.outside.root", FALSE)
   )
 }
 
@@ -190,6 +243,44 @@ era5_path_within <- function(path, parent) {
   path <- sub("/+$", "", normalizePath(path, winslash = "/", mustWork = FALSE))
   parent <- sub("/+$", "", normalizePath(parent, winslash = "/", mustWork = FALSE))
   identical(path, parent) || startsWith(path, paste0(parent, "/"))
+}
+
+era5_validate_existing_under_root <- function(path, root, label,
+                                              allow.symlinks = FALSE,
+                                              allow.outside.root = FALSE) {
+  if (era5_is_symlink(path) && !isTRUE(allow.symlinks)) {
+    era5_stop(label, " must not be a symlink: ", path, ".")
+  }
+  path.norm <- era5_normalize_existing_path(path, label)
+  root.norm <- era5_normalize_existing_path(root, paste0(label, " root"))
+  if (!era5_path_within(path.norm, root.norm) && !isTRUE(allow.outside.root)) {
+    era5_stop(label, " resolved outside root ", root.norm, ": ", path.norm, ".")
+  }
+  path.norm
+}
+
+era5_validate_new_path_under_root <- function(path, root, label) {
+  root.dir <- dirname(path)
+  dir.create(root.dir, recursive = TRUE, showWarnings = FALSE)
+  if (!dir.exists(root.dir)) {
+    era5_stop("failed to create output directory for ", label, ": ", root.dir, ".")
+  }
+  if (era5_is_symlink(path)) {
+    era5_stop(label, " must not be a symlink: ", path, ".")
+  }
+  if (dir.exists(path)) {
+    era5_stop(label, " must be a file path, not a directory: ", path, ".")
+  }
+  if (!dir.exists(root)) {
+    dir.create(root, recursive = TRUE, showWarnings = FALSE)
+  }
+  root.norm <- era5_normalize_existing_path(root, paste0(label, " root"))
+  dir.norm <- era5_normalize_existing_path(root.dir, paste0(label, " directory"))
+  candidate <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  if (!era5_path_within(dir.norm, root.norm) || !era5_path_within(candidate, root.norm)) {
+    era5_stop(label, " resolved outside output root ", root.norm, ": ", candidate, ".")
+  }
+  invisible(candidate)
 }
 
 era5_validate_temp_dir <- function(tmp.dir, forc.norm, label = "temporary directory") {
@@ -495,12 +586,39 @@ era5_relative_humidity <- function(t2m, d2m) {
   pmin(pmax(rh, 0), 1)
 }
 
-era5_convert_station <- function(raw, time, include.sp = TRUE) {
+era5_validate_raw_station <- function(raw, label = "station") {
+  for (vn in ERA5_REQUIRED_VARS) {
+    values <- raw[[vn]]
+    if (is.null(values)) {
+      era5_stop("internal conversion input missing variable '", vn, "' for ", label, ".")
+    }
+    bad <- which(!is.finite(as.numeric(values)))
+    if (length(bad)) {
+      era5_stop("non-finite raw ERA5 value in variable '", vn, "' for ", label,
+                " at timestep ", bad[[1]], ". Check missing/fill values before conversion.")
+    }
+  }
+  invisible(TRUE)
+}
+
+era5_validate_converted_station <- function(df, label = "station") {
+  for (nm in names(df)) {
+    bad <- which(!is.finite(as.numeric(df[[nm]])))
+    if (length(bad)) {
+      era5_stop("non-finite converted forcing value in column '", nm, "' for ", label,
+                " at timestep ", bad[[1]], ". No forcing CSVs were published.")
+    }
+  }
+  invisible(TRUE)
+}
+
+era5_convert_station <- function(raw, time, include.sp = TRUE, label = "station") {
   required <- ERA5_REQUIRED_VARS
   missing <- setdiff(required, names(raw))
   if (length(missing)) {
     era5_stop("internal conversion input missing variable(s): ", paste(missing, collapse = ", "), ".")
   }
+  era5_validate_raw_station(raw, label = label)
   dt <- era5_elapsed_seconds(time)
   tp.inc <- era5_cumulative_increment(raw$tp)
   ssr.inc <- era5_cumulative_increment(raw$ssr)
@@ -516,6 +634,7 @@ era5_convert_station <- function(raw, time, include.sp = TRUE) {
     out$Pres_pa <- as.numeric(raw$sp)
   }
   out[] <- lapply(out, function(x) round(x, 6))
+  era5_validate_converted_station(out, label = label)
   out
 }
 
@@ -542,12 +661,53 @@ era5_write_tsd <- function(df, time, file) {
   }
 }
 
-era5_discover_files <- function(dir.era5, years, pattern = NULL) {
+era5_regex_escape <- function(x) {
+  gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x)
+}
+
+era5_filter_discovery_depth <- function(files, root.norm, max.depth) {
+  if (!length(files) || !is.finite(max.depth)) return(files)
+  files.norm <- normalizePath(files, winslash = "/", mustWork = FALSE)
+  rel <- sub(paste0("^", era5_regex_escape(root.norm), "/?"), "", files.norm)
+  rel.dir <- dirname(rel)
+  depth <- ifelse(rel.dir == ".", 0L,
+                  vapply(strsplit(rel.dir, "/", fixed = TRUE), length, integer(1)))
+  files[depth <= max.depth]
+}
+
+era5_validate_discovered_files <- function(files, root.norm, limits,
+                                           label = "discovered ERA5 NetCDF file") {
+  files <- unique(files)
+  if (!length(files)) return(files)
+  if (length(files) > limits$max.files) {
+    era5_stop("discovered ERA5 NetCDF file count (", length(files),
+              ") exceeds era5.max.files limit (", limits$max.files, ").")
+  }
+  bad.link <- files[vapply(files, era5_is_symlink, logical(1))]
+  if (length(bad.link) && !isTRUE(limits$allow.symlinks)) {
+    era5_stop(label, " must not be a symlink: ", bad.link[[1]], ".")
+  }
+  resolved <- vapply(files, function(path) {
+    era5_validate_existing_under_root(path, root.norm, label,
+                                      allow.symlinks = limits$allow.symlinks,
+                                      allow.outside.root = limits$allow.outside.root)
+  }, character(1))
+  if (length(resolved) > limits$max.files) {
+    era5_stop("ERA5 NetCDF file count (", length(resolved),
+              ") exceeds era5.max.files limit (", limits$max.files, ").")
+  }
+  stats::setNames(resolved, NULL)
+}
+
+era5_discover_files <- function(dir.era5, years, pattern = NULL, limits = era5_read_limits()) {
   if (is.null(dir.era5) || !nzchar(dir.era5) || !dir.exists(dir.era5)) {
     era5_stop("ERA5 directory is missing or does not exist: ", dir.era5 %||% "<NULL>", ".")
   }
+  dir.norm <- era5_normalize_existing_path(dir.era5, "ERA5 directory")
   years <- as.character(years)
   all.files <- list.files(dir.era5, pattern = "\\.(nc|nc4)$", recursive = TRUE, full.names = TRUE)
+  all.files <- era5_validate_discovered_files(all.files, dir.norm, limits)
+  all.files <- era5_filter_discovery_depth(all.files, dir.norm, limits$max.discovery.depth)
   if (length(pattern) && !is.na(pattern) && nzchar(pattern)) {
     picked <- character()
     has.year.token <- grepl("\\{year\\}|%Y", pattern)
@@ -555,12 +715,13 @@ era5_discover_files <- function(dir.era5, years, pattern = NULL) {
       pat <- gsub("\\{year\\}|%Y", yr, pattern)
       if (grepl("[*?]", pat)) {
         rx <- glob2rx(pat)
-        rel <- sub(paste0("^", normalizePath(dir.era5, mustWork = TRUE), "/?"), "",
+        rel <- sub(paste0("^", era5_regex_escape(dir.norm), "/?"), "",
                    normalizePath(all.files, mustWork = FALSE))
         f <- all.files[grepl(rx, basename(all.files)) | grepl(rx, rel)]
       } else {
         direct <- if (file.exists(pat)) pat else file.path(dir.era5, pat)
         f <- if (file.exists(direct)) direct else character()
+        f <- era5_validate_discovered_files(f, dir.norm, limits)
       }
       if (!has.year.token && length(f) && any(grepl(yr, f))) {
         f <- f[grepl(yr, f)]
@@ -586,6 +747,10 @@ era5_discover_files <- function(dir.era5, years, pattern = NULL) {
   files <- sort(unique(files))
   if (!length(files)) {
     era5_stop("no ERA5 NetCDF files found under ", dir.era5, ".")
+  }
+  if (length(files) > limits$max.files) {
+    era5_stop("matched ERA5 NetCDF file count (", length(files),
+              ") exceeds era5.max.files limit (", limits$max.files, ").")
   }
   files
 }
@@ -701,6 +866,15 @@ era5_file_copy <- function(from, to, overwrite = TRUE) {
   }
 }
 
+era5_file_rename <- function(from, to) {
+  hook <- getOption("autoshud.era5.file.rename", NULL)
+  if (is.function(hook)) {
+    hook(from, to)
+  } else {
+    file.rename(from, to)
+  }
+}
+
 era5_copy_files <- function(from, to, overwrite = TRUE, label = "files") {
   if (length(from) != length(to)) {
     era5_stop("internal publish error for ", label, ": source and target lengths differ.")
@@ -773,143 +947,263 @@ era5_validate_shapefile_set <- function(path, label = "shapefile") {
   invisible(files)
 }
 
+era5_validate_output_target <- function(path, root, label) {
+  era5_validate_new_path_under_root(path, root, label)
+  invisible(path)
+}
+
+era5_root_for_index <- function(output.root, i) {
+  output.root[[min(i, length(output.root))]]
+}
+
+era5_roots_for_indices <- function(output.root, idx) {
+  vapply(idx, function(i) era5_root_for_index(output.root, i), character(1))
+}
+
+era5_validate_output_files <- function(files, root, label) {
+  if (!length(files)) return(invisible(files))
+  for (i in seq_along(files)) {
+    era5_validate_output_target(files[[i]], era5_root_for_index(root, i), label)
+  }
+  invisible(files)
+}
+
+era5_validate_staged_files <- function(files, root, label) {
+  era5_validate_regular_files(files, label)
+  for (path in files) {
+    era5_validate_existing_under_root(path, root, label)
+  }
+  invisible(files)
+}
+
 era5_publish_token <- function() {
   token <- paste0(as.integer(Sys.getpid()), "_", era5_clean_number(as.numeric(Sys.time()), 6),
                   "_", basename(tempfile(pattern = "")))
   gsub("[^A-Za-z0-9_.-]", "_", token)
 }
 
-era5_publish_files <- function(staged, final, label = "files") {
-  era5_validate_regular_files(staged, paste0("staged ", label))
-  dirs <- unique(dirname(final))
-  for (d in dirs) {
-    dir.create(d, recursive = TRUE, showWarnings = FALSE)
-    if (!dir.exists(d)) {
-      era5_stop("failed to create output directory for ", label, ": ", d, ".")
-    }
-  }
-  token <- era5_publish_token()
-  temp.final <- file.path(dirname(final), paste0(".", basename(final), ".era5_publish_", token))
-  on.exit(unlink(temp.final, force = TRUE), add = TRUE)
-  era5_copy_files(staged, temp.final, overwrite = TRUE, label = paste0(label, " temporary files"))
-  era5_validate_regular_files(temp.final, paste0("temporary ", label))
-  era5_copy_files(temp.final, final, overwrite = TRUE, label = label)
-  era5_validate_regular_files(final, paste0("published ", label))
-  unlink(temp.final, force = TRUE)
-  invisible(final)
-}
-
-era5_prepare_shapefile_publish <- function(staged, final, label) {
+era5_prepare_shapefile_publish <- function(staged, final, label, output.root = dirname(final)) {
   staged.files <- era5_validate_shapefile_set(staged, paste0("staged ", label))
-  dir.create(dirname(final), recursive = TRUE, showWarnings = FALSE)
-  if (!dir.exists(dirname(final))) {
-    era5_stop("failed to create output directory for ", label, ": ", dirname(final), ".")
-  }
+  era5_validate_staged_files(staged.files, dirname(staged), paste0("staged ", label))
+  era5_validate_output_target(final, output.root, label)
   staged.stem <- era5_path_stem(staged)
   final.stem <- era5_path_stem(final)
   suffix <- substring(basename(staged.files), nchar(staged.stem) + 1L)
   token <- era5_publish_token()
   temp.stem <- paste0(".", final.stem, ".era5_publish_", token)
   temp.files <- file.path(dirname(final), paste0(temp.stem, suffix))
+  final.files <- file.path(dirname(final), paste0(final.stem, suffix))
+  era5_validate_output_files(temp.files, output.root, paste0(label, " temporary shapefile sidecar"))
+  era5_validate_output_files(final.files, output.root, paste0(label, " shapefile sidecar"))
   list(staged = staged, final = final, label = label, staged.files = staged.files,
        temp.files = temp.files, temp.shp = file.path(dirname(final), paste0(temp.stem, ".shp")),
-       final.files = file.path(dirname(final), paste0(final.stem, suffix)),
+       final.files = final.files, output.root = output.root,
        existing = character(), backup = character())
 }
 
-era5_restore_shapefile_backups <- function(tx) {
-  final.files <- unique(unlist(lapply(tx, function(x) x$final.files), use.names = FALSE))
-  unlink(final.files[file.exists(final.files)], force = TRUE)
+era5_prepare_csv_publish <- function(staged, final, output.root, label = "forcing CSV files") {
+  if (length(staged) != length(final)) {
+    era5_stop("internal publish error: CSV source and target lengths differ.")
+  }
+  era5_validate_staged_files(staged, dirname(staged[[1]]), paste0("staged ", label))
+  era5_validate_output_files(final, output.root, label)
+  token <- era5_publish_token()
+  temp.files <- file.path(dirname(final), paste0(".", basename(final), ".era5_publish_", token))
+  era5_validate_output_files(temp.files, output.root, paste0(label, " temporary files"))
+  list(type = "csv", label = label, staged.files = staged, temp.files = temp.files,
+       final.files = final, output.root = output.root, existing = character(),
+       backup = character())
+}
+
+era5_safe_unlink_outputs <- function(files, output.root, label) {
+  if (!length(files)) return(invisible(TRUE))
+  ok <- TRUE
+  for (i in seq_along(files)) {
+    path <- files[[i]]
+    if (!file.exists(path) && !era5_is_symlink(path)) next
+    if (era5_is_symlink(path)) {
+      era5_stop(label, " must not be a symlink before unlink: ", path, ".")
+    }
+    root <- era5_root_for_index(output.root, i)
+    era5_validate_output_target(path, root, label)
+    ok <- isTRUE(unlink(path, force = TRUE) == 0L) && ok
+  }
+  invisible(ok)
+}
+
+era5_restore_existing_publish_backups <- function(tx) {
   ok <- TRUE
   for (item in tx) {
     if (!length(item$backup)) next
+    roots <- item$backup.root %||% item$output.root
     for (i in seq_along(item$backup)) {
-      if (!file.exists(item$backup[[i]])) next
-      if (file.exists(item$existing[[i]])) unlink(item$existing[[i]], force = TRUE)
-      ok <- isTRUE(file.rename(item$backup[[i]], item$existing[[i]])) && ok
+      backup <- item$backup[[i]]
+      existing <- item$existing[[i]]
+      if (!file.exists(backup)) next
+      root <- era5_root_for_index(roots, i)
+      if (file.exists(existing) || era5_is_symlink(existing)) {
+        era5_safe_unlink_outputs(existing, root, paste0(item$label, " restore target"))
+      }
+      era5_validate_existing_under_root(backup, root, paste0(item$label, " backup"))
+      era5_validate_output_target(existing, root, paste0(item$label, " restore target"))
+      ok <- isTRUE(era5_file_rename(backup, existing)) && ok
     }
   }
   ok
 }
 
-era5_restore_existing_shapefile_backups <- function(tx) {
+era5_restore_publish_backups <- function(tx) {
   ok <- TRUE
   for (item in tx) {
-    if (!length(item$backup)) next
-    for (i in seq_along(item$backup)) {
-      if (!file.exists(item$backup[[i]])) next
-      if (file.exists(item$existing[[i]])) unlink(item$existing[[i]], force = TRUE)
-      ok <- isTRUE(file.rename(item$backup[[i]], item$existing[[i]])) && ok
-    }
+    ok <- isTRUE(tryCatch(era5_safe_unlink_outputs(item$final.files, item$output.root,
+                                                   paste0(item$label, " final output")),
+                          error = function(e) FALSE)) && ok
   }
-  ok
+  isTRUE(era5_restore_existing_publish_backups(tx)) && ok
 }
 
-era5_publish_shapefiles <- function(staged, final, labels) {
-  if (length(staged) != length(final) || length(staged) != length(labels)) {
-    era5_stop("internal publish error: shapefile source, target, and label lengths differ.")
+era5_cleanup_publish_temps <- function(tx) {
+  for (item in tx) {
+    exists <- file.exists(item$temp.files)
+    roots <- era5_roots_for_indices(item$output.root, seq_along(item$temp.files))
+    tryCatch(era5_safe_unlink_outputs(item$temp.files[exists], roots[exists],
+                                      paste0(item$label, " temporary output")),
+             error = function(e) warning("ERA5 forcing: failed to remove temporary publish file(s): ",
+                                         conditionMessage(e), call. = FALSE))
   }
-  tx <- vector("list", length(staged))
-  for (i in seq_along(staged)) {
-    tx[[i]] <- era5_prepare_shapefile_publish(staged[[i]], final[[i]], labels[[i]])
-  }
-  temp.files <- unique(unlist(lapply(tx, function(x) x$temp.files), use.names = FALSE))
-  on.exit(unlink(temp.files[file.exists(temp.files)], force = TRUE), add = TRUE)
+  invisible(TRUE)
+}
 
-  for (i in seq_along(tx)) {
-    era5_copy_files(tx[[i]]$staged.files, tx[[i]]$temp.files, overwrite = TRUE,
-                    label = paste0(tx[[i]]$label, " temporary shapefile"))
-    era5_validate_shapefile_set(tx[[i]]$temp.shp, paste0("temporary ", tx[[i]]$label))
+era5_cleanup_publish_backups <- function(tx) {
+  for (item in tx) {
+    if (!length(item$backup)) next
+    roots <- item$backup.root %||% item$output.root
+    exists <- file.exists(item$backup)
+    backup.roots <- era5_roots_for_indices(roots, seq_along(item$backup))
+    era5_safe_unlink_outputs(item$backup[exists], backup.roots[exists],
+                             paste0(item$label, " backup"))
   }
+  invisible(TRUE)
+}
 
+era5_copy_publish_temps <- function(tx) {
   for (i in seq_along(tx)) {
-    tx[[i]]$existing <- era5_shapefile_sidecars(tx[[i]]$final, must.exist = FALSE)
-    if (length(tx[[i]]$existing)) {
+    item <- tx[[i]]
+    era5_validate_staged_files(item$staged.files, dirname(item$staged.files[[1]]),
+                               paste0("staged ", item$label))
+    era5_validate_output_files(item$temp.files, item$output.root,
+                               paste0(item$label, " temporary files"))
+    era5_copy_files(item$staged.files, item$temp.files, overwrite = TRUE,
+                    label = paste0(item$label, " temporary files"))
+    era5_validate_regular_files(item$temp.files, paste0("temporary ", item$label))
+  }
+  invisible(tx)
+}
+
+era5_backup_publish_existing <- function(tx) {
+  for (i in seq_along(tx)) {
+    item <- tx[[i]]
+    existing.idx <- which(file.exists(item$final.files) |
+                            vapply(item$final.files, era5_is_symlink, logical(1)))
+    existing <- item$final.files[existing.idx]
+    if (length(existing)) {
+      if (any(vapply(existing, era5_is_symlink, logical(1)))) {
+        restored <- era5_restore_existing_publish_backups(tx)
+        era5_stop("existing ", item$label,
+                  " output path is a symlink; refusing to replace it",
+                  if (restored) "." else " and attempted to restore previous outputs.")
+      }
+      roots <- era5_roots_for_indices(item$output.root, existing.idx)
+      for (j in seq_along(existing)) {
+        era5_validate_existing_under_root(existing[[j]], era5_root_for_index(roots, j),
+                                          paste0("existing ", item$label))
+      }
       backup.token <- era5_publish_token()
-      tx[[i]]$backup <- file.path(dirname(tx[[i]]$existing),
-                                  paste0(".", basename(tx[[i]]$existing),
-                                         ".era5_backup_", backup.token))
-      ok <- file.rename(tx[[i]]$existing, tx[[i]]$backup)
+      backup <- file.path(dirname(existing),
+                          paste0(".", basename(existing), ".era5_backup_", backup.token))
+      era5_validate_output_files(backup, roots, paste0(item$label, " backup"))
+      ok <- era5_file_rename(existing, backup)
       ok[is.na(ok)] <- FALSE
       if (!all(ok)) {
-        restored <- era5_restore_existing_shapefile_backups(tx)
-        era5_stop("failed to prepare existing ", tx[[i]]$label,
-                  " shapefile for replacement",
-                  if (restored) "; previous final shapefiles were restored." else
-                    "; attempted to restore previous final shapefiles.")
+        tx[[i]]$existing <- existing[seq_along(ok)]
+        tx[[i]]$backup <- backup[seq_along(ok)]
+        tx[[i]]$backup.root <- roots[seq_along(ok)]
+        restored <- era5_restore_existing_publish_backups(tx)
+        era5_stop("failed to prepare existing ", item$label, " for replacement",
+                  if (restored) "; previous outputs were restored." else
+                    "; attempted to restore previous outputs.")
       }
+      item$existing <- existing
+      item$backup <- backup
+      item$backup.root <- roots
+      tx[[i]] <- item
     }
   }
+  tx
+}
 
+era5_validate_published_item <- function(item) {
+  if (identical(item$type, "shapefile")) {
+    era5_validate_shapefile_set(item$final, paste0("published ", item$label))
+  } else {
+    era5_validate_regular_files(item$final.files, paste0("published ", item$label))
+  }
+  invisible(TRUE)
+}
+
+era5_publish_transaction <- function(tx) {
+  if (!length(tx)) return(invisible(tx))
+  on.exit(era5_cleanup_publish_temps(tx), add = TRUE)
+  era5_copy_publish_temps(tx)
+  tx <- era5_backup_publish_existing(tx)
   for (i in seq_along(tx)) {
-    ok <- file.rename(tx[[i]]$temp.files, tx[[i]]$final.files)
+    item <- tx[[i]]
+    era5_validate_staged_files(item$temp.files, dirname(item$temp.files[[1]]),
+                               paste0("temporary ", item$label))
+    era5_validate_output_files(item$final.files, item$output.root, item$label)
+    ok <- era5_file_rename(item$temp.files, item$final.files)
     ok[is.na(ok)] <- FALSE
     if (!all(ok)) {
-      restored <- era5_restore_shapefile_backups(tx)
-      era5_stop("failed to publish ", tx[[i]]$label, " shapefile to ",
-                tx[[i]]$final,
-                if (restored) "; previous final shapefiles were restored." else
-                  "; attempted to restore previous final shapefiles.")
+      restored <- era5_restore_publish_backups(tx)
+      era5_stop("failed to publish ", item$label,
+                if (restored) "; previous outputs were restored." else
+                  "; attempted to restore previous outputs.")
     }
   }
-
-  for (i in seq_along(tx)) {
+  for (item in tx) {
     ok <- tryCatch({
-      era5_validate_shapefile_set(tx[[i]]$final, paste0("published ", tx[[i]]$label))
+      era5_validate_published_item(item)
       TRUE
     }, error = function(e) FALSE)
     if (!ok) {
-      restored <- era5_restore_shapefile_backups(tx)
-      era5_stop("failed to validate published ", tx[[i]]$label, " shapefile at ",
-                tx[[i]]$final,
-                if (restored) "; previous final shapefiles were restored." else
-                  "; attempted to restore previous final shapefiles.")
+      restored <- era5_restore_publish_backups(tx)
+      era5_stop("failed to validate published ", item$label,
+                if (restored) "; previous outputs were restored." else
+                  "; attempted to restore previous outputs.")
     }
   }
+  era5_cleanup_publish_backups(tx)
+  invisible(tx)
+}
 
-  backups <- unique(unlist(lapply(tx, function(x) x$backup), use.names = FALSE))
-  unlink(backups[file.exists(backups)], force = TRUE)
-  invisible(final)
+era5_publish_outputs <- function(csv.staged, csv.final, meteo.staged, meteo.final, labels,
+                                 forc.root, gcs.root = dirname(meteo.final[[1]]),
+                                 pcs.root = dirname(meteo.final[[2]])) {
+  if (length(meteo.staged) != 2L || length(meteo.final) != 2L || length(labels) != 2L) {
+    era5_stop("internal publish error: meteo shapefile source, target, and label lengths differ.")
+  }
+  tx <- list(
+    era5_prepare_csv_publish(csv.staged, csv.final,
+                             output.root = rep(forc.root, length(csv.final))),
+    era5_prepare_shapefile_publish(meteo.staged[[1]], meteo.final[[1]], labels[[1]],
+                                   output.root = gcs.root),
+    era5_prepare_shapefile_publish(meteo.staged[[2]], meteo.final[[2]], labels[[2]],
+                                   output.root = pcs.root)
+  )
+  tx[[2]]$type <- "shapefile"
+  tx[[3]]$type <- "shapefile"
+  era5_publish_transaction(tx)
+  invisible(list(csv = csv.final, meteo = meteo.final))
 }
 
 era5_write_meteo_cov <- function(sites, pd.gcs = NULL, pd.pcs = NULL, crs.pcs,
@@ -940,8 +1234,9 @@ era5_nc2csv <- function(xfg, pd.gcs, pd.pcs) {
   if (is.null(pd.gcs$wbd.buf) || !file.exists(pd.gcs$wbd.buf)) {
     era5_stop("watershed buffer shapefile is missing: ", pd.gcs$wbd.buf %||% "<NULL>", ".")
   }
+  limits <- era5_read_limits(xfg$era5)
   files <- era5_discover_files(xfg$dir.era5 %||% xfg$dir.ldas, xfg$years,
-                               pattern = xfg$era5$file.pattern)
+                               pattern = xfg$era5$file.pattern, limits = limits)
   nc <- era5_open_first_file(files)
   on.exit(ncdf4::nc_close(nc), add = TRUE)
   coords <- era5_read_coords(nc)
@@ -954,7 +1249,6 @@ era5_nc2csv <- function(xfg, pd.gcs, pd.pcs) {
   sites <- era5_select_grid(coords$lon, coords$lat, bbox,
                             buffer.deg = xfg$era5$buffer.deg %||% 0,
                             lon.mode = xfg$era5$lon.mode %||% "auto")
-  limits <- era5_read_limits(xfg$era5)
   era5_guard_selection_size(nrow(sites), length(coords$time), length(ERA5_REQUIRED_VARS), limits,
                             context = "first ERA5 file selection")
   ncdf4::nc_close(nc)
@@ -968,7 +1262,7 @@ era5_nc2csv <- function(xfg, pd.gcs, pd.pcs) {
   csv.tmp <- file.path(tmp.dir, paste0(sites$ID, ".csv"))
   for (i in seq_len(nrow(sites))) {
     raw <- lapply(data$raw, function(m) m[, i])
-    df <- era5_convert_station(raw, data$time, include.sp = TRUE)
+    df <- era5_convert_station(raw, data$time, include.sp = TRUE, label = sites$ID[[i]])
     era5_write_tsd(df, data$time, csv.tmp[[i]])
   }
   meteo.tmp <- c(gcs = file.path(tmp.dir, "meteo_gcs", basename(pd.gcs$meteoCov)),
@@ -980,9 +1274,11 @@ era5_nc2csv <- function(xfg, pd.gcs, pd.pcs) {
   era5_validate_shapefile_set(meteo.tmp[["pcs"]], "staged PCS meteoCov shapefile")
 
   final <- file.path(xfg$dir$forc, basename(csv.tmp))
-  era5_publish_files(csv.tmp, final, label = "forcing CSV files")
-  era5_publish_shapefiles(meteo.tmp, c(pd.gcs$meteoCov, pd.pcs$meteoCov),
-                          c("GCS meteoCov", "PCS meteoCov"))
+  era5_publish_outputs(csv.tmp, final, meteo.tmp, c(pd.gcs$meteoCov, pd.pcs$meteoCov),
+                       c("GCS meteoCov", "PCS meteoCov"),
+                       forc.root = xfg$dir$forc,
+                       gcs.root = dirname(pd.gcs$meteoCov),
+                       pcs.root = dirname(pd.pcs$meteoCov))
   message("ERA5 forcing: wrote ", length(final), " CSV file(s), ", pd.gcs$meteoCov,
           ", and ", pd.pcs$meteoCov, ".")
   invisible(list(files = files, sites = sites, csv = final,
