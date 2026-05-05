@@ -59,6 +59,12 @@ read.prj <- function(fn.prj){
   era5.buffer.deg = getVAL(xcfg, 'era5.buffer.deg', TRUE, defVal = 0)
   era5.lon.mode = getVAL(xcfg, 'era5.lon.mode', defVal = 'auto')
   era5.file.pattern = getVAL(xcfg, 'era5.file.pattern')
+  era5.max.sites = getVAL(xcfg, 'era5.max.sites', TRUE)
+  era5.max.timesteps = getVAL(xcfg, 'era5.max.timesteps', TRUE)
+  era5.max.vars = getVAL(xcfg, 'era5.max.vars', TRUE)
+  era5.max.bytes = getVAL(xcfg, 'era5.max.bytes', TRUE)
+  era5.max.read.bytes = getVAL(xcfg, 'era5.max.read.bytes', TRUE)
+  era5.time.chunk = getVAL(xcfg, 'era5.time.chunk', TRUE)
   dir.out = getVAL(xcfg, 'dir.out')
   dout.forc = getVAL(xcfg, 'dout.forc')
   
@@ -230,7 +236,13 @@ read.prj <- function(fn.prj){
     era5.cfg = list(
       'buffer.deg' = era5.buffer.deg,
       'lon.mode' = era5.lon.mode,
-      'file.pattern' = era5.file.pattern
+      'file.pattern' = era5.file.pattern,
+      'max.sites' = era5.max.sites,
+      'max.timesteps' = era5.max.timesteps,
+      'max.vars' = era5.max.vars,
+      'max.bytes' = era5.max.bytes,
+      'max.read.bytes' = era5.max.read.bytes,
+      'time.chunk' = era5.time.chunk
     )
     cfg = c(cfg, 
             # 'res' = res,

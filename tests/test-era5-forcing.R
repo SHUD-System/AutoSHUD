@@ -60,11 +60,33 @@ expect_error <- function(expr, pattern) {
   invisible(msg)
 }
 
+skip_if <- function(condition, name, reason) {
+  if (isTRUE(condition)) {
+    skip(name, reason)
+    return(TRUE)
+  }
+  FALSE
+}
+
 read_tsd_file <- function(file) {
   lines <- readLines(file, warn = FALSE)
   header <- strsplit(lines[[2]], "\t")[[1]]
   utils::read.table(file, sep = "\t", skip = 2, header = FALSE,
                     col.names = header, check.names = FALSE)
+}
+
+make_var_values <- function(dims, tp = 0, ssr = 0, t2m = 293.15, d2m = 283.15,
+                            u10 = 3, v10 = 4, sp = 100000) {
+  fill <- function(value) array(value, dim = dims)
+  list(
+    tp = fill(tp),
+    t2m = fill(t2m),
+    d2m = fill(d2m),
+    u10 = fill(u10),
+    v10 = fill(v10),
+    ssr = fill(ssr),
+    sp = fill(sp)
+  )
 }
 
 have <- setNames(vapply(c("ncdf4", "sf", "xts", "rSHUD", "raster", "sp"), requireNamespace, logical(1), quietly = TRUE),
@@ -109,6 +131,69 @@ make_wbd <- function(file, bbox = c(xmin = -105.2, xmax = -104.8, ymin = 39.8, y
   dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
   sf::st_write(x, file, delete_dsn = TRUE, quiet = TRUE)
   file
+}
+
+make_era5_context <- function(tmp, bbox = c(xmin = -105.2, xmax = -104.8, ymin = 39.8, ymax = 40.2),
+                              crs.pcs = NULL, era5 = list(buffer.deg = 0.25, lon.mode = "auto", file.pattern = NULL),
+                              case.name = "case") {
+  crs.pcs <- crs.pcs %||% sf::st_crs(4326)$wkt
+  era5.dir <- file.path(tmp, case.name, "era5")
+  forc.dir <- file.path(tmp, case.name, "forcing")
+  pd.gcs <- list(wbd.buf = make_wbd(file.path(tmp, case.name, "gcs", "wbd_buf.shp"), bbox = bbox),
+                 meteoCov = file.path(tmp, case.name, "gcs", "meteoCov.shp"))
+  pd.pcs <- list(wbd = pd.gcs$wbd.buf,
+                 wbd.buf = pd.gcs$wbd.buf,
+                 meteoCov = file.path(tmp, case.name, "pcs", "meteoCov.shp"))
+  xfg <- list(dir.era5 = era5.dir, dir.ldas = era5.dir, years = 2001,
+              dir = list(forc = forc.dir), era5 = era5, crs.pcs = crs.pcs,
+              crs.gcs = sf::st_crs(4326), iforcing = 0.7)
+  list(xfg = xfg, pd.gcs = pd.gcs, pd.pcs = pd.pcs, era5.dir = era5.dir, forc.dir = forc.dir)
+}
+
+run_classic_step3_metadata <- function(xfg, pd.pcs, forc.file) {
+  sp.forc <- sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
+  sp.forc$ID <- paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
+  sp.c <- sf::st_centroid(sp.forc)["ID"]
+  dem <- raster::raster(nrows = 4, ncols = 4, xmn = -180, xmx = 180, ymn = -90, ymx = 90,
+                        crs = sp::CRS("+init=epsg:4326"))
+  raster::values(dem) <- 100
+  wbd <- sf::st_read(pd.pcs$wbd, quiet = TRUE)
+  cov <- sf::st_as_sf(rSHUD::ForcingCoverage(sp.meteoSite = as(sp.c, "Spatial"),
+                                             pcs = sp::CRS("+init=epsg:4326"),
+                                             gcs = sp::CRS("+init=epsg:4326"),
+                                             dem = dem,
+                                             wbd = as(wbd, "Spatial"),
+                                             enlarge = 1))
+  rSHUD::write.forc(sf::st_drop_geometry(cov), path = xfg$dir$forc,
+                    startdate = "20010101", file = forc.file)
+  forc.file
+}
+
+run_synthetic_acceptance_case <- function(case.name, tmp, bbox, lon, lat, lon.mode) {
+  ctx <- make_era5_context(tmp, bbox = bbox,
+                           era5 = list(buffer.deg = 0.25, lon.mode = lon.mode,
+                                       file.pattern = NULL),
+                           case.name = case.name)
+  vals <- make_var_values(c(length(lon), length(lat), 2),
+                          tp = c(0.001, 0.002), ssr = c(3600, 7200))
+  make_nc(file.path(ctx$era5.dir, paste0("ERA5_", case.name, "_20010101.nc")),
+          lon, lat, 0:1, var.values = vals)
+  source("Rfunction/Step2_ForcingDispatch.R")
+  old.converter <- getOption("autoshud.era5.converter")
+  options(autoshud.era5.converter = NULL)
+  on.exit(options(autoshud.era5.converter = old.converter), add = TRUE)
+  autoshud_step2_dispatch_forcing(xfg = ctx$xfg, pd.gcs = ctx$pd.gcs, pd.pcs = ctx$pd.pcs)
+  csv <- list.files(ctx$forc.dir, pattern = "\\.csv$", full.names = TRUE)
+  expect_true(length(csv) > 0, paste(case.name, "must emit forcing CSV files"))
+  expect_true(file.exists(ctx$pd.gcs$meteoCov), paste(case.name, "must emit GCS meteoCov"))
+  expect_true(file.exists(ctx$pd.pcs$meteoCov), paste(case.name, "must emit PCS meteoCov"))
+  forc.file <- run_classic_step3_metadata(ctx$xfg, ctx$pd.pcs,
+                                          file.path(tmp, case.name, "model.forc"))
+  expect_true(file.exists(forc.file), paste(case.name, "must emit Step3 forcing metadata"))
+  forc.lines <- readLines(forc.file, warn = FALSE)
+  expect_true(any(vapply(basename(csv), function(nm) any(grepl(nm, forc.lines, fixed = TRUE)), logical(1))),
+              paste(case.name, "Step3 forcing metadata must reference emitted CSV files"))
+  list(csv = csv, forc.file = forc.file, pd.gcs = ctx$pd.gcs, pd.pcs = ctx$pd.pcs)
 }
 
 if (requireNamespace("sf", quietly = TRUE) && requireNamespace("rSHUD", quietly = TRUE)) {
@@ -213,6 +298,87 @@ test_that("ERA5 cumulative radiation differences across resets", {
 })
 
 if (all(have[c("ncdf4", "sf", "xts")])) {
+  test_that("ERA5 reads non-contiguous selected points without rectangular slab limits", {
+    tmp <- tempfile("era5-point-read-")
+    dir.create(tmp)
+    vals <- array(seq_len(3 * 3 * 3), dim = c(3, 3, 3))
+    fn <- make_nc(file.path(tmp, "ERA5_20010101.nc"), c(255.00, 255.25, 255.50),
+                  c(39.75, 40.00, 40.25), 0:2, var.values = list(tp = vals))
+    nc <- ncdf4::nc_open(fn)
+    on.exit(ncdf4::nc_close(nc), add = TRUE)
+    coords <- era5_read_coords(nc)
+    sites <- data.frame(lon_idx = c(1L, 3L), lat_idx = c(1L, 3L))
+    limits <- era5_read_limits(list(max.bytes = 64, max.read.bytes = 16, time.chunk = 2))
+    out <- era5_read_var_sites(nc, "tp", sites, coords$names, limits = limits)
+    expect_equal(out[, 1], vals[1, 1, ], tolerance = 1e-12)
+    expect_equal(out[, 2], vals[3, 3, ], tolerance = 1e-12)
+    ncdf4::nc_close(nc)
+    on.exit(NULL, add = FALSE)
+  })
+
+  test_that("ERA5 leaves pre-existing .era5_tmp symlink untouched", {
+    tmp <- tempfile("era5-temp-symlink-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    dir.create(ctx$forc.dir, recursive = TRUE)
+    target <- file.path(tmp, "external-target")
+    dir.create(target)
+    sentinel <- file.path(target, "sentinel.txt")
+    writeLines("keep", sentinel)
+    fixed.tmp <- file.path(ctx$forc.dir, ".era5_tmp")
+    if (skip_if(!file.symlink(target, fixed.tmp),
+                "ERA5 leaves pre-existing .era5_tmp symlink untouched",
+                "test platform does not support file.symlink")) return(invisible(TRUE))
+    vals <- make_var_values(c(1, 1, 2), tp = c(0.001, 0.002), ssr = c(3600, 7200))
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1, var.values = vals)
+    res <- era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs)
+    expect_equal(length(res$csv), 1L)
+    expect_true(era5_is_symlink(fixed.tmp), "pre-existing .era5_tmp symlink must not be replaced")
+    expect_true(file.exists(sentinel), "symlink target content must not be removed")
+    expect_equal(length(list.files(target, pattern = "\\.csv$", full.names = TRUE)), 0L)
+  })
+
+  test_that("ERA5 artificial tiny memory limit fails before CSV output", {
+    tmp <- tempfile("era5-memory-limit-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp, era5 = list(buffer.deg = 0.25, lon.mode = "auto",
+                                             file.pattern = NULL, max.bytes = 1))
+    vals <- make_var_values(c(1, 1, 2), tp = c(0.001, 0.002), ssr = c(3600, 7200))
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1, var.values = vals)
+    expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs), "max.bytes")
+    expect_true(!dir.exists(ctx$forc.dir) || length(list.files(ctx$forc.dir, pattern = "\\.csv$")) == 0)
+  })
+
+  test_that("ERA5 two-file cumulative tp and ssr boundaries handle non-reset", {
+    tmp <- tempfile("era5-boundary-nonreset-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2), tp = c(0.001, 0.003), ssr = c(3600, 7200)))
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010102.nc"), c(255.00), c(40.00), 2:3,
+            var.values = make_var_values(c(1, 1, 2), tp = c(0.006, 0.010), ssr = c(10800, 18000)))
+    res <- era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs)
+    out <- read_tsd_file(res$csv[[1]])
+    expect_equal(out$Precip_mm.d, c(24, 48, 72, 96), tolerance = 1e-6)
+    expect_equal(out$RN_w.m2, c(1, 1, 1, 2), tolerance = 1e-6)
+    expect_true(all(out$Precip_mm.d >= 0 & out$RN_w.m2 >= 0))
+  })
+
+  test_that("ERA5 two-file cumulative tp and ssr boundaries handle reset", {
+    tmp <- tempfile("era5-boundary-reset-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2), tp = c(0.001, 0.003), ssr = c(3600, 7200)))
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010102.nc"), c(255.00), c(40.00), 2:3,
+            var.values = make_var_values(c(1, 1, 2), tp = c(0.001, 0.004), ssr = c(1800, 5400)))
+    res <- era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs)
+    out <- read_tsd_file(res$csv[[1]])
+    expect_equal(out$Precip_mm.d, c(24, 48, 24, 72), tolerance = 1e-6)
+    expect_equal(out$RN_w.m2, c(1, 1, 0.5, 1), tolerance = 1e-6)
+    expect_true(all(out$Precip_mm.d >= 0 & out$RN_w.m2 >= 0))
+  })
+
   test_that("ERA5 converter writes CSV schema and meteo shapefile metadata", {
     tmp <- tempfile("era5-e2e-")
     dir.create(tmp)
@@ -235,7 +401,7 @@ if (all(have[c("ncdf4", "sf", "xts")])) {
     make_nc(file.path(era5.dir, "ERA5_20010101.nc"), c(255.00, 255.25), c(40.00), 0:2, var.values = vals)
     xfg <- list(dir.era5 = era5.dir, dir.ldas = era5.dir, years = 2001, dir = list(forc = forc.dir),
                 era5 = list(buffer.deg = 0.25, lon.mode = "auto", file.pattern = NULL),
-                crs.pcs = sf::st_crs(4326)$wkt)
+                crs.pcs = sf::st_crs(3857)$wkt)
     res <- era5_nc2csv(xfg, pd.gcs, pd.pcs)
     expect_equal(length(res$csv), 2L)
     one <- read_tsd_file(res$csv[[1]])
@@ -248,6 +414,9 @@ if (all(have[c("ncdf4", "sf", "xts")])) {
     expect_equal(nrow(g), 2L)
     expect_equal(nrow(p), 2L)
     expect_equal(as.integer(sf::st_crs(g)$epsg), 4326L)
+    expect_equal(as.integer(sf::st_crs(p)$epsg), 3857L)
+    expect_equal(sort(paste0(g$ID, ".csv")), sort(basename(res$csv)))
+    expect_true(all(paste0(p$ID, ".csv") %in% basename(res$csv)))
   })
 
   test_that("ERA5 missing variable errors before CSV output", {
@@ -330,8 +499,34 @@ if (all(have[c("ncdf4", "sf", "xts", "rSHUD", "raster", "sp")])) {
     forc.lines <- readLines(forc.file, warn = FALSE)
     expect_true(any(grepl("X-105Y40.csv", forc.lines, fixed = TRUE)))
   })
+
+  test_that("Synthetic case1-US acceptance uses real Step2 dispatch and Step3 metadata", {
+    tmp <- tempfile("era5-case1-us-")
+    dir.create(tmp)
+    res <- run_synthetic_acceptance_case(
+      "case1-US", tmp,
+      bbox = c(xmin = -105.2, xmax = -104.8, ymin = 39.8, ymax = 40.2),
+      lon = c(255.00, 255.25), lat = c(40.00), lon.mode = "auto"
+    )
+    expect_true(any(grepl("^X-105", basename(res$csv))))
+  })
+
+  test_that("Synthetic case2-CN acceptance uses real Step2 dispatch and Step3 metadata", {
+    tmp <- tempfile("era5-case2-cn-")
+    dir.create(tmp)
+    res <- run_synthetic_acceptance_case(
+      "case2-CN", tmp,
+      bbox = c(xmin = 116.1, xmax = 116.4, ymin = 39.8, ymax = 40.1),
+      lon = c(116.25, 116.50), lat = c(40.00), lon.mode = "-180_180"
+    )
+    expect_true(any(grepl("^X116", basename(res$csv))))
+  })
 } else {
   skip("Classic Step2-Step3 ERA5 path builds forcing metadata",
+       paste("requires", paste(names(have)[!have], collapse = ", ")))
+  skip("Synthetic case1-US acceptance uses real Step2 dispatch and Step3 metadata",
+       paste("requires", paste(names(have)[!have], collapse = ", ")))
+  skip("Synthetic case2-CN acceptance uses real Step2 dispatch and Step3 metadata",
        paste("requires", paste(names(have)[!have], collapse = ", ")))
 }
 

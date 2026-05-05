@@ -25,6 +25,12 @@ Optional ERA5 keys:
 era5.buffer.deg 0.25
 era5.lon.mode auto
 era5.file.pattern ERA5_{year}*.nc
+era5.max.sites 50000
+era5.max.timesteps 200000
+era5.max.vars 16
+era5.max.bytes 1073741824
+era5.max.read.bytes 67108864
+era5.time.chunk 8192
 ```
 
 - `era5.buffer.deg`: extra geographic buffer added to the watershed-buffer
@@ -32,6 +38,12 @@ era5.file.pattern ERA5_{year}*.nc
 - `era5.lon.mode`: `auto`, `0_360`, or `-180_180`. Default is `auto`.
 - `era5.file.pattern`: optional glob-style pattern used per requested year.
   `{year}` or `%Y` is replaced with each `startyear:endyear` value.
+- `era5.max.sites`, `era5.max.timesteps`, `era5.max.vars`, and
+  `era5.max.bytes`: size guards for selected site/time/variable data before
+  NetCDF reads are published to CSV. Defaults are shown above.
+- `era5.max.read.bytes` and `era5.time.chunk`: per-point time-series read
+  guards. The converter reads exact selected grid points in time chunks instead
+  of the full enclosing lon/lat rectangle.
 
 ## Input Files
 
@@ -75,3 +87,20 @@ five required columns.
 forward differences across file and day boundaries, treats accumulation resets
 as a new cycle, clips negative increments to zero, and scales precipitation to
 `mm/day` and radiation to `W/m2` using elapsed seconds.
+
+## Acceptance Evidence
+
+`tests/test-era5-forcing.R` includes named synthetic acceptance cases:
+
+- `case1-US`: watershed near `-105, 40` with ERA5 longitudes in `0..360`
+  notation. The test runs the real Step2 forcing dispatcher with `Forcing 0.7`,
+  synthetic ERA5 NetCDF, and then exercises the classic Step3
+  `ForcingCoverage()`/`write.forc()` metadata path.
+- `case2-CN`: watershed near `116, 40` with ERA5 longitudes in `-180..180`
+  notation. The test uses the same Step2 dispatch and Step3 metadata path.
+
+The unit harness does not run a full Step1 terrain preprocessing workflow.
+Step1 depends on broader GIS/DEM preprocessing inputs that are not meaningful
+for these synthetic NetCDF fixtures. The acceptance cases instead provide the
+Step1 output artifacts needed by forcing conversion, then verify Step2 and the
+classic Step3 forcing metadata path without external ERA5 preprocessing.

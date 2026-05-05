@@ -2,6 +2,14 @@
 
 ERA5_FORCING_COLUMNS <- c("Precip_mm.d", "Temp_C", "RH_1", "Wind_m.s", "RN_w.m2")
 ERA5_REQUIRED_VARS <- c("tp", "t2m", "d2m", "u10", "v10", "ssr", "sp")
+ERA5_DEFAULT_LIMITS <- list(
+  max.sites = 50000,
+  max.timesteps = 200000,
+  max.vars = 16,
+  max.bytes = 1024^3,
+  max.read.bytes = 64 * 1024^2,
+  time.chunk = 8192
+)
 
 era5_stop <- function(..., call. = FALSE) {
   stop(paste0("ERA5 forcing: ", paste0(..., collapse = "")), call. = call.)
@@ -49,6 +57,199 @@ era5_lon_mode <- function(lon, mode = "auto") {
 }
 
 `%||%` <- function(x, y) if (is.null(x) || length(x) == 0 || all(is.na(x))) y else x
+
+era5_config_value <- function(cfg, key) {
+  if (is.null(cfg)) return(NULL)
+  candidates <- unique(c(key, gsub("\\.", "_", key), gsub("\\.", "-", key)))
+  for (nm in candidates) {
+    if (!is.null(cfg[[nm]])) return(cfg[[nm]])
+  }
+  NULL
+}
+
+era5_positive_number <- function(value, name, default, integer = FALSE) {
+  if (is.null(value) || length(value) == 0 || all(is.na(value))) {
+    return(default)
+  }
+  value <- suppressWarnings(as.numeric(value[[1]]))
+  if (!is.finite(value) || value <= 0) {
+    era5_stop(name, " must be a positive number.")
+  }
+  if (integer) value <- as.integer(floor(value))
+  if (integer && value < 1L) {
+    era5_stop(name, " must be at least 1.")
+  }
+  value
+}
+
+era5_read_limits <- function(cfg = NULL) {
+  get_limit <- function(key, default, integer = FALSE) {
+    value <- era5_config_value(cfg, key)
+    if (is.null(value)) {
+      value <- getOption(paste0("autoshud.era5.", key), NULL)
+    }
+    era5_positive_number(value, paste0("era5.", key), default, integer = integer)
+  }
+  list(
+    max.sites = get_limit("max.sites", ERA5_DEFAULT_LIMITS$max.sites, integer = TRUE),
+    max.timesteps = get_limit("max.timesteps", ERA5_DEFAULT_LIMITS$max.timesteps, integer = TRUE),
+    max.vars = get_limit("max.vars", ERA5_DEFAULT_LIMITS$max.vars, integer = TRUE),
+    max.bytes = get_limit("max.bytes", ERA5_DEFAULT_LIMITS$max.bytes),
+    max.read.bytes = get_limit("max.read.bytes", ERA5_DEFAULT_LIMITS$max.read.bytes),
+    time.chunk = get_limit("time.chunk", ERA5_DEFAULT_LIMITS$time.chunk, integer = TRUE)
+  )
+}
+
+era5_format_bytes <- function(bytes) {
+  bytes <- as.numeric(bytes)
+  if (!is.finite(bytes)) return("unknown bytes")
+  units <- c("bytes", "KiB", "MiB", "GiB", "TiB")
+  i <- 1L
+  while (bytes >= 1024 && i < length(units)) {
+    bytes <- bytes / 1024
+    i <- i + 1L
+  }
+  if (i == 1L) {
+    paste0(round(bytes), " ", units[[i]])
+  } else {
+    paste0(sprintf("%.1f", bytes), " ", units[[i]])
+  }
+}
+
+era5_estimate_bytes <- function(nsites, nt, nvars, bytes.per.value = 8) {
+  as.numeric(nsites) * as.numeric(nt) * as.numeric(nvars) * bytes.per.value
+}
+
+era5_guard_selection_size <- function(nsites, nt, nvars, limits, context = "selection") {
+  nsites <- as.numeric(nsites)
+  nt <- as.numeric(nt)
+  nvars <- as.numeric(nvars)
+  if (!is.finite(nsites) || nsites < 1) {
+    era5_stop(context, " has no selected sites.")
+  }
+  if (!is.finite(nt) || nt < 1) {
+    era5_stop(context, " has no selected timesteps.")
+  }
+  if (!is.finite(nvars) || nvars < 1) {
+    era5_stop(context, " has no selected variables.")
+  }
+  if (nsites > limits$max.sites) {
+    era5_stop("selected sites (", nsites, ") exceed era5.max.sites limit (",
+              limits$max.sites, ") for ", context, ".")
+  }
+  if (nt > limits$max.timesteps) {
+    era5_stop("selected timesteps (", nt, ") exceed era5.max.timesteps limit (",
+              limits$max.timesteps, ") for ", context, ".")
+  }
+  if (nvars > limits$max.vars) {
+    era5_stop("selected variables (", nvars, ") exceed era5.max.vars limit (",
+              limits$max.vars, ") for ", context, ".")
+  }
+  bytes <- era5_estimate_bytes(nsites, nt, nvars)
+  if (bytes > limits$max.bytes) {
+    era5_stop("estimated selected ERA5 data size ", era5_format_bytes(bytes),
+              " exceeds era5.max.bytes limit ", era5_format_bytes(limits$max.bytes),
+              " for ", context, ".")
+  }
+  invisible(bytes)
+}
+
+era5_guard_read_chunk <- function(nt, limits, context = "NetCDF read") {
+  bytes <- era5_estimate_bytes(1, nt, 1)
+  if (bytes > limits$max.read.bytes) {
+    era5_stop(context, " chunk size ", era5_format_bytes(bytes),
+              " exceeds era5.max.read.bytes limit ",
+              era5_format_bytes(limits$max.read.bytes), ".")
+  }
+  invisible(bytes)
+}
+
+era5_time_chunks <- function(nt, limits) {
+  chunk <- min(as.integer(limits$time.chunk),
+               max(1L, as.integer(floor(limits$max.read.bytes / 8))))
+  if (!is.finite(chunk) || chunk < 1L) chunk <- 1L
+  starts <- seq.int(1L, as.integer(nt), by = chunk)
+  data.frame(start = starts,
+             count = pmin(chunk, as.integer(nt) - starts + 1L))
+}
+
+era5_is_symlink <- function(path) {
+  link <- tryCatch(Sys.readlink(path), warning = function(e) "", error = function(e) "")
+  !is.na(link) && nzchar(link)
+}
+
+era5_normalize_existing_path <- function(path, label) {
+  tryCatch(
+    normalizePath(path, winslash = "/", mustWork = TRUE),
+    error = function(e) era5_stop(label, " does not exist or cannot be normalized: ", path, ".")
+  )
+}
+
+era5_path_within <- function(path, parent) {
+  path <- sub("/+$", "", normalizePath(path, winslash = "/", mustWork = FALSE))
+  parent <- sub("/+$", "", normalizePath(parent, winslash = "/", mustWork = FALSE))
+  identical(path, parent) || startsWith(path, paste0(parent, "/"))
+}
+
+era5_validate_temp_dir <- function(tmp.dir, forc.norm, label = "temporary directory") {
+  if (era5_is_symlink(tmp.dir)) {
+    era5_stop(label, " must not be a symlink: ", tmp.dir, ".")
+  }
+  if (!dir.exists(tmp.dir)) {
+    era5_stop(label, " was not created: ", tmp.dir, ".")
+  }
+  tmp.norm <- era5_normalize_existing_path(tmp.dir, label)
+  if (!era5_path_within(tmp.norm, forc.norm)) {
+    era5_stop(label, " resolved outside forcing directory: ", tmp.norm, ".")
+  }
+  tmp.norm
+}
+
+era5_create_run_temp_dir <- function(forc.dir) {
+  if (is.null(forc.dir) || !nzchar(forc.dir)) {
+    era5_stop("forcing output directory is missing.")
+  }
+  dir.create(forc.dir, recursive = TRUE, showWarnings = FALSE)
+  forc.norm <- era5_normalize_existing_path(forc.dir, "forcing output directory")
+  for (attempt in seq_len(100L)) {
+    tmp.dir <- tempfile(pattern = ".era5_tmp_", tmpdir = forc.norm)
+    if (file.exists(tmp.dir) || era5_is_symlink(tmp.dir)) next
+    if (!dir.create(tmp.dir, recursive = FALSE, showWarnings = FALSE)) next
+    tmp.norm <- era5_validate_temp_dir(tmp.dir, forc.norm, "ERA5 run temporary directory")
+    token <- paste0(as.integer(Sys.getpid()), "-", era5_clean_number(as.numeric(Sys.time()), 6),
+                    "-", basename(tmp.dir))
+    marker <- file.path(tmp.dir, ".autoshud_era5_tmp")
+    writeLines(token, marker, useBytes = TRUE)
+    return(list(path = tmp.dir, path.norm = tmp.norm, forc.norm = forc.norm,
+                marker = marker, token = token, created = TRUE))
+  }
+  era5_stop("failed to create a unique ERA5 temporary directory under ", forc.norm, ".")
+}
+
+era5_cleanup_run_temp_dir <- function(tmp.info) {
+  if (is.null(tmp.info) || !isTRUE(tmp.info$created)) return(invisible(FALSE))
+  tmp.dir <- tmp.info$path
+  if (!file.exists(tmp.dir) && !dir.exists(tmp.dir)) return(invisible(FALSE))
+  if (era5_is_symlink(tmp.dir)) {
+    warning("ERA5 forcing: refusing to remove symlink temporary path: ", tmp.dir, call. = FALSE)
+    return(invisible(FALSE))
+  }
+  tmp.norm <- tryCatch(normalizePath(tmp.dir, winslash = "/", mustWork = TRUE),
+                       error = function(e) NA_character_)
+  if (is.na(tmp.norm) || !identical(tmp.norm, tmp.info$path.norm) ||
+      !era5_path_within(tmp.norm, tmp.info$forc.norm) || !dir.exists(tmp.dir)) {
+    warning("ERA5 forcing: refusing to remove unexpected temporary path: ", tmp.dir, call. = FALSE)
+    return(invisible(FALSE))
+  }
+  marker <- tmp.info$marker
+  token <- tryCatch(readLines(marker, warn = FALSE), error = function(e) character())
+  if (!length(token) || !identical(token[[1]], tmp.info$token)) {
+    warning("ERA5 forcing: refusing to remove unrecognized temporary path: ", tmp.dir, call. = FALSE)
+    return(invisible(FALSE))
+  }
+  unlink(tmp.dir, recursive = TRUE, force = TRUE)
+  invisible(TRUE)
+}
 
 era5_bbox_vector <- function(x) {
   if (inherits(x, "bbox")) {
@@ -230,30 +431,31 @@ era5_var_dim_order <- function(nc, var.name, coord.names) {
   c(lon = lon.i, lat = lat.i, time = time.i)
 }
 
-era5_read_var_sites <- function(nc, var.name, sites, coord.names) {
+era5_read_var_sites <- function(nc, var.name, sites, coord.names, limits = era5_read_limits()) {
   order <- era5_var_dim_order(nc, var.name, coord.names)
   dims <- nc$var[[var.name]]$dim
   if (length(dims) != 3) {
     era5_stop("variable '", var.name, "' must have exactly lon, lat, and time dimensions.")
   }
-  start <- rep(1, length(dims))
-  count <- vapply(dims, function(d) d$len, numeric(1))
-  lon.range <- range(sites$lon_idx)
-  lat.range <- range(sites$lat_idx)
-  start[order[["lon"]]] <- lon.range[[1]]
-  count[order[["lon"]]] <- diff(lon.range) + 1
-  start[order[["lat"]]] <- lat.range[[1]]
-  count[order[["lat"]]] <- diff(lat.range) + 1
-  arr <- ncdf4::ncvar_get(nc, var.name, start = start, count = count, collapse_degen = FALSE)
-  target <- c(order[["lon"]], order[["lat"]], order[["time"]])
-  arr <- aperm(arr, target)
-  dims <- dim(arr)
-  nt <- dims[[3]]
-  rel.lon <- sites$lon_idx - lon.range[[1]] + 1
-  rel.lat <- sites$lat_idx - lat.range[[1]] + 1
+  nt <- dims[[order[["time"]]]]$len
+  era5_guard_selection_size(nrow(sites), nt, 1L, limits,
+                            context = paste0("variable '", var.name, "'"))
   out <- matrix(NA_real_, nrow = nt, ncol = nrow(sites))
+  chunks <- era5_time_chunks(nt, limits)
   for (i in seq_len(nrow(sites))) {
-    out[, i] <- arr[rel.lon[[i]], rel.lat[[i]], ]
+    for (j in seq_len(nrow(chunks))) {
+      start <- rep(1, length(dims))
+      count <- rep(1, length(dims))
+      start[order[["lon"]]] <- sites$lon_idx[[i]]
+      start[order[["lat"]]] <- sites$lat_idx[[i]]
+      start[order[["time"]]] <- chunks$start[[j]]
+      count[order[["time"]]] <- chunks$count[[j]]
+      era5_guard_read_chunk(chunks$count[[j]], limits,
+                            context = paste0("variable '", var.name, "' point read"))
+      idx <- seq.int(chunks$start[[j]], length.out = chunks$count[[j]])
+      out[idx, i] <- as.numeric(ncdf4::ncvar_get(nc, var.name, start = start,
+                                                 count = count, collapse_degen = FALSE))
+    }
   }
   out
 }
@@ -394,11 +596,12 @@ era5_validate_time_sequence <- function(time) {
   invisible(TRUE)
 }
 
-era5_collect_site_data <- function(files, sites, vars = ERA5_REQUIRED_VARS) {
+era5_collect_site_data <- function(files, sites, vars = ERA5_REQUIRED_VARS, limits = era5_read_limits()) {
   all.time <- as.POSIXct(character(), tz = "UTC")
   raw <- lapply(vars, function(v) matrix(numeric(0), nrow = 0, ncol = nrow(sites)))
   names(raw) <- vars
   coord.ref <- NULL
+  total.nt <- 0L
   for (fn in files) {
     message("ERA5 forcing: reading ", basename(fn))
     nc <- ncdf4::nc_open(fn)
@@ -406,11 +609,14 @@ era5_collect_site_data <- function(files, sites, vars = ERA5_REQUIRED_VARS) {
     coords <- era5_read_coords(nc)
     era5_check_vars(nc, vars)
     time <- era5_parse_time(coords$time, coords$time.units, coords$time.calendar)
+    total.nt <- total.nt + length(time)
+    era5_guard_selection_size(nrow(sites), total.nt, length(vars), limits,
+                              context = "selected ERA5 files")
     if (is.null(coord.ref)) {
       coord.ref <- coords$names
     }
     for (vn in vars) {
-      m <- era5_read_var_sites(nc, vn, sites, coords$names)
+      m <- era5_read_var_sites(nc, vn, sites, coords$names, limits = limits)
       raw[[vn]] <- rbind(raw[[vn]], m)
     }
     all.time <- c(all.time, time)
@@ -466,17 +672,17 @@ era5_nc2csv <- function(xfg, pd.gcs, pd.pcs) {
   sites <- era5_select_grid(coords$lon, coords$lat, bbox,
                             buffer.deg = xfg$era5$buffer.deg %||% 0,
                             lon.mode = xfg$era5$lon.mode %||% "auto")
+  limits <- era5_read_limits(xfg$era5)
+  era5_guard_selection_size(nrow(sites), length(coords$time), length(ERA5_REQUIRED_VARS), limits,
+                            context = "first ERA5 file selection")
   ncdf4::nc_close(nc)
   on.exit(NULL, add = FALSE)
 
-  tmp.dir <- file.path(xfg$dir$forc, ".era5_tmp")
-  if (dir.exists(tmp.dir)) unlink(tmp.dir, recursive = TRUE, force = TRUE)
-  dir.create(tmp.dir, recursive = TRUE, showWarnings = FALSE)
-  on.exit({
-    if (dir.exists(tmp.dir)) unlink(tmp.dir, recursive = TRUE, force = TRUE)
-  }, add = TRUE)
+  tmp.info <- era5_create_run_temp_dir(xfg$dir$forc)
+  tmp.dir <- tmp.info$path
+  on.exit(era5_cleanup_run_temp_dir(tmp.info), add = TRUE)
 
-  data <- era5_collect_site_data(files, sites)
+  data <- era5_collect_site_data(files, sites, limits = limits)
   csv.tmp <- file.path(tmp.dir, paste0(sites$ID, ".csv"))
   for (i in seq_len(nrow(sites))) {
     raw <- lapply(data$raw, function(m) m[, i])
