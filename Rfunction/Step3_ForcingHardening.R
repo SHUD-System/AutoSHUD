@@ -116,6 +116,44 @@ autoshud_step3_plain_filename <- function(filename, label = "forcing CSV") {
   filename
 }
 
+autoshud_step3_forcing_root <- function(forcing.dir) {
+  sub("/+$", "", normalizePath(forcing.dir, winslash = "/", mustWork = TRUE))
+}
+
+autoshud_step3_is_symlink <- function(path) {
+  link <- tryCatch(Sys.readlink(path), error = function(e) NA_character_)
+  !is.na(link) & nzchar(link)
+}
+
+autoshud_step3_path_in_root <- function(path, root) {
+  path <- sub("/+$", "", normalizePath(path, winslash = "/", mustWork = TRUE))
+  root <- sub("/+$", "", root)
+  if (.Platform$OS.type == "windows") {
+    path <- tolower(path)
+    root <- tolower(root)
+  }
+  identical(path, root) || startsWith(path, paste0(root, "/"))
+}
+
+autoshud_step3_guard_forcing_csv_paths <- function(files, forcing.root) {
+  symlink <- autoshud_step3_is_symlink(files)
+  if (any(symlink)) {
+    stop("Local forcing CSV path is a symlink and is not allowed: ",
+         paste(normalizePath(files[symlink], winslash = "/",
+                             mustWork = FALSE), collapse = ", "),
+         call. = FALSE)
+  }
+  inside <- vapply(files, autoshud_step3_path_in_root, logical(1),
+                   root = forcing.root)
+  if (any(!inside)) {
+    stop("Local forcing CSV path escapes forcing directory: ",
+         paste(normalizePath(files[!inside], winslash = "/",
+                             mustWork = FALSE), collapse = ", "),
+         call. = FALSE)
+  }
+  invisible(files)
+}
+
 autoshud_step3_validate_forcing_ids <- function(id, forcing.dir = NULL) {
   id <- as.character(id)
   bad <- rep(FALSE, length(id))
@@ -163,6 +201,42 @@ autoshud_step3_validate_forcing_ids <- function(id, forcing.dir = NULL) {
   id
 }
 
+autoshud_step3_local_forcing_limit <- function(xfg, name, default) {
+  value <- NULL
+  if (!is.null(xfg) && !is.null(xfg$para) && name %in% names(xfg$para)) {
+    value <- xfg$para[[name]]
+  }
+  if (is.null(value) || length(value) == 0 || all(is.na(value))) {
+    value <- default
+  }
+  value <- suppressWarnings(as.numeric(value[[1]]))
+  if (!is.finite(value) || value <= 0) {
+    stop("Local forcing resource limit ", name,
+         " must be a positive finite value.", call. = FALSE)
+  }
+  value
+}
+
+autoshud_step3_local_forcing_limits <- function(xfg = NULL) {
+  limits <- list(
+    max.bytes = autoshud_step3_local_forcing_limit(
+      xfg, "local.forcing.max.bytes", 256 * 1024 * 1024
+    ),
+    max.rows = as.integer(floor(autoshud_step3_local_forcing_limit(
+      xfg, "local.forcing.max.rows", 1000000
+    ))),
+    max.cols = as.integer(floor(autoshud_step3_local_forcing_limit(
+      xfg, "local.forcing.max.cols", 256
+    )))
+  )
+  if (!is.finite(limits$max.rows) || limits$max.rows < 1 ||
+      !is.finite(limits$max.cols) || limits$max.cols < 1) {
+    stop("Local forcing row and column limits must be at least 1.",
+         call. = FALSE)
+  }
+  limits
+}
+
 autoshud_step3_first_name <- function(names, candidates) {
   idx <- match(tolower(candidates), tolower(names), nomatch = 0)
   idx <- idx[idx > 0]
@@ -197,6 +271,11 @@ autoshud_step3_site_ids <- function(sp.forc, forcing.dir = NULL) {
     id <- fallback
   }
   autoshud_step3_validate_forcing_ids(id, forcing.dir = forcing.dir)
+}
+
+autoshud_step3_assign_site_ids <- function(sp.forc, forcing.dir = NULL) {
+  sp.forc$ID <- autoshud_step3_site_ids(sp.forc, forcing.dir = forcing.dir)
+  sp.forc
 }
 
 autoshud_step3_forcing_window <- function(years, startday = 0, endday = NULL) {
@@ -236,17 +315,32 @@ autoshud_step3_scan_words <- function(line, label) {
            })
 }
 
-autoshud_step3_read_tsd_csv <- function(file) {
+autoshud_step3_read_tsd_csv <- function(file,
+                                        limits = autoshud_step3_local_forcing_limits()) {
   label <- normalizePath(file, winslash = "/", mustWork = FALSE)
   if (!file.exists(file)) {
     stop("Local forcing CSV is missing output copy: ", label, call. = FALSE)
   }
-  lines <- tryCatch(readLines(file, warn = FALSE),
+  size <- file.info(file)$size
+  if (!is.finite(size)) {
+    stop("Local forcing CSV parse failed for ", label,
+         ": file size is unavailable.", call. = FALSE)
+  }
+  if (size > limits$max.bytes) {
+    stop("Local forcing CSV exceeds configured byte limit for ", label,
+         ": ", size, " bytes > local.forcing.max.bytes=",
+         format(limits$max.bytes, scientific = FALSE, trim = TRUE), ".",
+         call. = FALSE)
+  }
+
+  con <- file(file, open = "r")
+  on.exit(close(con), add = TRUE)
+  lines <- tryCatch(readLines(con, n = 2L, warn = FALSE),
                     error = function(e) {
                       stop("Local forcing CSV parse failed for ", label, ": ",
                            conditionMessage(e), call. = FALSE)
                     })
-  if (length(lines) < 3) {
+  if (length(lines) < 2) {
     stop("Local forcing CSV parse failed for ", label,
          ": expected SHUD TSD header, column names, and data rows.",
          call. = FALSE)
@@ -265,13 +359,31 @@ autoshud_step3_read_tsd_csv <- function(file) {
          ": invalid row count, column count, or time unit in TSD header.",
          call. = FALSE)
   }
-  required.lines <- 2L + nr
-  if (length(lines) < required.lines) {
+  if (nr > limits$max.rows) {
+    stop("Local forcing CSV exceeds configured row limit for ", label,
+         ": ", nr, " rows > local.forcing.max.rows=", limits$max.rows,
+         ".", call. = FALSE)
+  }
+  if (nc > limits$max.cols) {
+    stop("Local forcing CSV exceeds configured column limit for ", label,
+         ": ", nc, " columns > local.forcing.max.cols=", limits$max.cols,
+         ".", call. = FALSE)
+  }
+  body <- tryCatch(readLines(con, n = nr, warn = FALSE),
+                   error = function(e) {
+                     stop("Local forcing CSV parse failed for ", label, ": ",
+                          conditionMessage(e), call. = FALSE)
+                   })
+  if (length(body) < nr) {
     stop("Local forcing CSV parse failed for ", label,
          ": header row count exceeds available data rows.", call. = FALSE)
   }
-  if (length(lines) > required.lines &&
-      any(nzchar(trimws(lines[(required.lines + 1L):length(lines)])))) {
+  extra <- tryCatch(readLines(con, warn = FALSE),
+                    error = function(e) {
+                      stop("Local forcing CSV parse failed for ", label, ": ",
+                           conditionMessage(e), call. = FALSE)
+                    })
+  if (length(extra) && any(nzchar(trimws(extra)))) {
     stop("Local forcing CSV parse failed for ", label,
          ": multiple TSD blocks cannot be safely cropped.", call. = FALSE)
   }
@@ -282,7 +394,7 @@ autoshud_step3_read_tsd_csv <- function(file) {
   }
   dat <- tryCatch(
     utils::read.table(
-      text = paste(lines[seq.int(3L, required.lines)], collapse = "\n"),
+      text = paste(body[seq_len(nr)], collapse = "\n"),
       header = FALSE, sep = "", col.names = col.names,
       check.names = FALSE, comment.char = "", quote = ""
     ),
@@ -318,14 +430,15 @@ autoshud_step3_read_tsd_csv <- function(file) {
        unit.sec = unit.sec, time = time)
 }
 
-autoshud_step3_write_tsd_csv <- function(tsd, keep, file) {
+autoshud_step3_write_tsd_csv <- function(tsd, keep, file, window) {
   dat <- tsd$data[keep, , drop = FALSE]
   time <- tsd$time[keep]
-  dat[[1]] <- as.numeric(time - time[[1]]) / tsd$unit.sec
+  dat[[1]] <- as.numeric(difftime(time, window$origin, units = "secs")) /
+    tsd$unit.sec
   header <- tsd$header
   header[[1]] <- as.character(nrow(dat))
   header[[2]] <- as.character(ncol(dat))
-  header[[3]] <- format(time[[1]], "%Y%m%d")
+  header[[3]] <- format(window$origin, "%Y%m%d")
   header[[4]] <- format(time[[length(time)]], "%Y%m%d")
   header[[5]] <- format(tsd$unit.sec, scientific = FALSE, trim = TRUE)
   dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
@@ -336,8 +449,9 @@ autoshud_step3_write_tsd_csv <- function(tsd, keep, file) {
   invisible(file)
 }
 
-autoshud_step3_stage_windowed_tsd <- function(file, staged.file, window) {
-  tsd <- autoshud_step3_read_tsd_csv(file)
+autoshud_step3_stage_windowed_tsd <- function(file, staged.file, window,
+                                             limits = autoshud_step3_local_forcing_limits()) {
+  tsd <- autoshud_step3_read_tsd_csv(file, limits = limits)
   time.num <- as.numeric(tsd$time)
   if (length(time.num) > 1) {
     dt <- diff(time.num)
@@ -368,13 +482,112 @@ autoshud_step3_stage_windowed_tsd <- function(file, staged.file, window) {
     stop("Local forcing CSV has no rows inside configured forcing window for ",
          tsd$label, ".", call. = FALSE)
   }
-  autoshud_step3_write_tsd_csv(tsd, keep = keep, file = staged.file)
+  autoshud_step3_write_tsd_csv(tsd, keep = keep, file = staged.file,
+                               window = window)
   invisible(list(file = file, staged = staged.file, rows = sum(keep)))
+}
+
+autoshud_step3_default_publish_prepare <- function(staged.file, replacement.file,
+                                                   final.file, index) {
+  file.copy(staged.file, replacement.file, overwrite = TRUE, copy.date = TRUE)
+}
+
+autoshud_step3_publish_files <- function(staged.files, final.files,
+                                         publish.fun = NULL) {
+  if (length(staged.files) != length(final.files)) {
+    stop("Internal error: staged/final local forcing publish counts differ.",
+         call. = FALSE)
+  }
+  if (is.null(publish.fun)) {
+    publish.fun <- autoshud_step3_default_publish_prepare
+  }
+
+  n <- length(final.files)
+  backup.files <- rep(NA_character_, n)
+  replacement.files <- rep(NA_character_, n)
+  had.final <- file.exists(final.files)
+  backed.up <- rep(FALSE, n)
+  published <- rep(FALSE, n)
+
+  cleanup_paths <- function(paths) {
+    paths <- paths[!is.na(paths) & nzchar(paths)]
+    if (length(paths)) unlink(paths, force = TRUE)
+  }
+  rollback <- function() {
+    for (j in rev(seq_len(n))) {
+      if (published[[j]]) {
+        unlink(final.files[[j]], force = TRUE)
+      }
+      if (backed.up[[j]] && had.final[[j]] && file.exists(backup.files[[j]])) {
+        if (!file.rename(backup.files[[j]], final.files[[j]])) {
+          stop("Failed to roll back local forcing CSV after publish failure: ",
+               final.files[[j]], call. = FALSE)
+        }
+        backed.up[[j]] <<- FALSE
+      }
+    }
+  }
+
+  failed <- NULL
+  for (i in seq_len(n)) {
+    replacement.files[[i]] <- tempfile(
+      pattern = paste0(".", basename(final.files[[i]]), ".autoshud-new-"),
+      tmpdir = dirname(final.files[[i]])
+    )
+    ok <- tryCatch(
+      isTRUE(publish.fun(staged.files[[i]], replacement.files[[i]],
+                         final.files[[i]], i)),
+      error = function(e) {
+        failed <<- paste0(final.files[[i]], ": ", conditionMessage(e))
+        FALSE
+      }
+    )
+    if (!ok || !file.exists(replacement.files[[i]])) {
+      if (is.null(failed)) {
+        failed <- paste0(final.files[[i]], ": failed to prepare replacement")
+      }
+      rollback()
+      cleanup_paths(replacement.files)
+      cleanup_paths(backup.files)
+      stop("Failed to publish windowed local forcing CSV output copy: ",
+           failed, call. = FALSE)
+    }
+
+    if (had.final[[i]]) {
+      backup.files[[i]] <- tempfile(
+        pattern = paste0(".", basename(final.files[[i]]), ".autoshud-backup-"),
+        tmpdir = dirname(final.files[[i]])
+      )
+      if (!file.rename(final.files[[i]], backup.files[[i]])) {
+        failed <- paste0(final.files[[i]], ": failed to back up existing file")
+        rollback()
+        cleanup_paths(replacement.files)
+        cleanup_paths(backup.files)
+        stop("Failed to publish windowed local forcing CSV output copy: ",
+             failed, call. = FALSE)
+      }
+      backed.up[[i]] <- TRUE
+    }
+
+    if (!file.rename(replacement.files[[i]], final.files[[i]])) {
+      failed <- paste0(final.files[[i]], ": failed to install replacement")
+      rollback()
+      cleanup_paths(replacement.files)
+      cleanup_paths(backup.files)
+      stop("Failed to publish windowed local forcing CSV output copy: ",
+           failed, call. = FALSE)
+    }
+    published[[i]] <- TRUE
+  }
+
+  cleanup_paths(backup.files)
+  invisible(final.files)
 }
 
 autoshud_step3_enforce_local_forcing_window <- function(sp.forc, xfg,
                                                        years = xfg$years,
-                                                       forcing.dir = xfg$dir$forc) {
+                                                       forcing.dir = xfg$dir$forc,
+                                                       publish.fun = NULL) {
   if (is.null(forcing.dir) || length(forcing.dir) == 0 ||
       is.na(forcing.dir[[1]]) || !nzchar(forcing.dir[[1]])) {
     stop("Local forcing output directory (dout.forc) is missing.", call. = FALSE)
@@ -382,6 +595,7 @@ autoshud_step3_enforce_local_forcing_window <- function(sp.forc, xfg,
   if (!dir.exists(forcing.dir)) {
     stop("Local forcing output directory is missing: ", forcing.dir, call. = FALSE)
   }
+  forcing.dir <- autoshud_step3_forcing_root(forcing.dir[[1]])
   dat <- if (inherits(sp.forc, "sf")) sf::st_drop_geometry(sp.forc) else as.data.frame(sp.forc)
   if ("Filename" %in% names(dat)) {
     filename <- as.character(dat$Filename)
@@ -401,12 +615,14 @@ autoshud_step3_enforce_local_forcing_window <- function(sp.forc, xfg,
                collapse = ", "),
          call. = FALSE)
   }
+  autoshud_step3_guard_forcing_csv_paths(final.files, forcing.dir)
 
   window <- autoshud_step3_forcing_window(
     years = years,
     startday = xfg$para$STARTDAY %||% 0,
     endday = xfg$para$ENDDAY
   )
+  limits <- autoshud_step3_local_forcing_limits(xfg)
   stage.dir <- tempfile(pattern = ".autoshud_local_forcing_", tmpdir = forcing.dir)
   if (!dir.create(stage.dir, recursive = FALSE, showWarnings = FALSE)) {
     stop("Failed to create local forcing staging directory under ", forcing.dir,
@@ -415,13 +631,11 @@ autoshud_step3_enforce_local_forcing_window <- function(sp.forc, xfg,
   on.exit(unlink(stage.dir, recursive = TRUE, force = TRUE), add = TRUE)
   staged <- file.path(stage.dir, basename(final.files))
   for (i in seq_along(final.files)) {
-    autoshud_step3_stage_windowed_tsd(final.files[[i]], staged[[i]], window)
+    autoshud_step3_stage_windowed_tsd(final.files[[i]], staged[[i]], window,
+                                      limits = limits)
   }
-  ok <- file.copy(staged, final.files, overwrite = TRUE, copy.date = TRUE)
-  if (!all(ok)) {
-    stop("Failed to publish windowed local forcing CSV output copy: ",
-         paste(final.files[!ok], collapse = ", "), call. = FALSE)
-  }
+  autoshud_step3_guard_forcing_csv_paths(final.files, forcing.dir)
+  autoshud_step3_publish_files(staged, final.files, publish.fun = publish.fun)
   message("AutoSHUD Step3 local forcing window enforced for ", length(final.files),
           " CSV file(s): ", format(window$start, "%Y-%m-%d"), " to ",
           format(window$end.exclusive - 1, "%Y-%m-%d"), ".")

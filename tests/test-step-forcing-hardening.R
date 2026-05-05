@@ -84,12 +84,15 @@ hash_file <- function(file) unname(tools::md5sum(file))
 
 read_tsd_file <- function(file) {
   lines <- readLines(file, warn = FALSE)
+  header.values <- strsplit(lines[[1]], "[[:space:]]+")[[1]]
   header <- strsplit(lines[[2]], "[[:space:]]+")[[1]]
-  utils::read.table(file, sep = "", skip = 2, header = FALSE,
-                    col.names = header, check.names = FALSE)
+  dat <- utils::read.table(file, sep = "", skip = 2, header = FALSE,
+                           col.names = header, check.names = FALSE)
+  attr(dat, "tsd_header") <- header.values
+  dat
 }
 
-write_tsd_fixture <- function(file, dates) {
+write_tsd_fixture <- function(file, dates, n_extra_cols = 0L) {
   dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
   time <- as.POSIXct(dates, tz = "UTC")
   intervals <- as.numeric(time - time[[1]]) / 86400
@@ -102,6 +105,11 @@ write_tsd_fixture <- function(file, dates) {
     RN_w.m2 = 100,
     check.names = FALSE
   )
+  if (n_extra_cols > 0L) {
+    for (i in seq_len(n_extra_cols)) {
+      dat[[paste0("Extra_", i)]] <- i
+    }
+  }
   header <- c(nrow(dat), ncol(dat), format(time[[1]], "%Y%m%d"),
               format(time[[length(time)]], "%Y%m%d"), 86400)
   write(header, file = file, ncolumns = length(header), sep = "\t")
@@ -175,6 +183,42 @@ if (have_sf) {
                  "Unsafe forcing/meteoCov ID")
   })
 
+  test_that("Step3 local forcing assigns fallback IDs before coverage", {
+    tmp <- tempfile("local-forcing-id-")
+    forc.dir <- file.path(tmp, "forcing")
+    dir.create(forc.dir, recursive = TRUE, showWarnings = FALSE)
+    fallback.id <- "X-104Y41"
+    output.csv <- file.path(forc.dir, paste0(fallback.id, ".csv"))
+    write_tsd_fixture(output.csv, seq(as.Date("2001-01-01"),
+                                      as.Date("2001-01-10"), by = "day"))
+
+    station <- sf::st_as_sf(
+      data.frame(ID = "", xcenter = -104, ycenter = 41),
+      coords = c("xcenter", "ycenter"), remove = FALSE, crs = 4326
+    )
+    station <- autoshud_step3_assign_site_ids(station, forcing.dir = forc.dir)
+    coverage <- function(sp.meteoSite, pcs, gcs, dem, wbd, ...) {
+      sf::st_as_sf(sp.meteoSite)
+    }
+    covered <- autoshud_step3_forcing_coverage(
+      sp.meteoSite = as(station, "Spatial"), pcs = sf::st_crs(4326),
+      gcs = sf::st_crs(4326), dem = structure(list(), class = "fake_dem"),
+      wbd = structure(list(), class = "fake_wbd"), coverage.fun = coverage
+    )
+    autoshud_step3_enforce_local_forcing_window(covered,
+                                                xfg = list(years = 2001,
+                                                           dir = list(forc = forc.dir),
+                                                           para = list(STARTDAY = 2,
+                                                                       ENDDAY = 4)),
+                                                years = 2001,
+                                                forcing.dir = forc.dir)
+    out <- read_tsd_file(output.csv)
+    expect_equal(station$ID[[1]], fallback.id)
+    expect_equal(nrow(out), 3L)
+    expect_equal(out$Time_interval[[1]], 2)
+    expect_equal(out$Time_interval[[nrow(out)]], 4)
+  })
+
   test_that("Step3 local forcing window crops output copies and preserves source", {
     tmp <- tempfile("local-forcing-window-")
     source.dir <- file.path(tmp, "source")
@@ -202,6 +246,7 @@ if (have_sf) {
     last.date <- as.Date("2001-01-01") + out$Time_interval[[nrow(out)]]
     expect_equal(first.date, as.Date("2001-01-01"))
     expect_equal(last.date, as.Date("2001-12-31"))
+    expect_equal(attr(out, "tsd_header")[[3]], "20010101")
     expect_equal(hash_file(source.csv), source.hash)
   })
 
@@ -227,11 +272,123 @@ if (have_sf) {
                                                 years = xfg$years,
                                                 forcing.dir = forc.dir)
     out <- read_tsd_file(output.csv)
-    dates.out <- as.Date("2001-02-01") + out$Time_interval
     expect_equal(nrow(out), 29L)
-    expect_equal(dates.out[[1]], as.Date("2001-02-01"))
-    expect_equal(dates.out[[nrow(out)]], as.Date("2001-03-01"))
+    expect_equal(out$Time_interval[[1]], 31)
+    expect_equal(out$Time_interval[[nrow(out)]], 59)
+    expect_equal(attr(out, "tsd_header")[[3]], "20010101")
     expect_equal(hash_file(source.csv), source.hash)
+  })
+
+  test_that("Step3 local forcing rejects symlinked output CSV", {
+    tmp <- tempfile("local-forcing-symlink-")
+    forc.dir <- file.path(tmp, "forcing")
+    outside.dir <- file.path(tmp, "outside")
+    dir.create(forc.dir, recursive = TRUE, showWarnings = FALSE)
+    dir.create(outside.dir, recursive = TRUE, showWarnings = FALSE)
+    outside.csv <- file.path(outside.dir, "site_c.csv")
+    output.csv <- file.path(forc.dir, "site_c.csv")
+    write_tsd_fixture(outside.csv, seq(as.Date("2001-01-01"),
+                                       as.Date("2001-01-10"), by = "day"))
+    outside.hash <- hash_file(outside.csv)
+    ok <- tryCatch(file.symlink(outside.csv, output.csv),
+                   warning = function(w) FALSE,
+                   error = function(e) FALSE)
+    if (!isTRUE(ok) || !nzchar(Sys.readlink(output.csv))) {
+      skip("Step3 local forcing rejects symlinked output CSV",
+           "filesystem does not support symlink creation")
+    } else {
+      sp.forc <- sf::st_as_sf(
+        data.frame(ID = 1L, Filename = "site_c.csv", x = 0, y = 0),
+        coords = c("x", "y"), crs = 4326
+      )
+      xfg <- list(years = 2001, dir = list(forc = forc.dir),
+                  para = list(STARTDAY = 0, ENDDAY = 4))
+      expect_error(
+        autoshud_step3_enforce_local_forcing_window(sp.forc, xfg = xfg,
+                                                    years = xfg$years,
+                                                    forcing.dir = forc.dir),
+        "symlink"
+      )
+      expect_equal(hash_file(outside.csv), outside.hash)
+    }
+  })
+
+  test_that("Step3 local forcing publish rolls back all files on failure", {
+    tmp <- tempfile("local-forcing-rollback-")
+    forc.dir <- file.path(tmp, "forcing")
+    dir.create(forc.dir, recursive = TRUE, showWarnings = FALSE)
+    files <- file.path(forc.dir, c("site_d.csv", "site_e.csv"))
+    dates <- seq(as.Date("2001-01-01"), as.Date("2001-01-10"), by = "day")
+    write_tsd_fixture(files[[1]], dates)
+    write_tsd_fixture(files[[2]], dates)
+    before.hash <- vapply(files, hash_file, character(1))
+
+    sp.forc <- sf::st_as_sf(
+      data.frame(ID = 1:2, Filename = basename(files), x = c(0, 1), y = c(0, 1)),
+      coords = c("x", "y"), crs = 4326
+    )
+    xfg <- list(years = 2001, dir = list(forc = forc.dir),
+                para = list(STARTDAY = 2, ENDDAY = 4))
+    fail.second <- function(staged.file, replacement.file, final.file, index) {
+      if (index == 2L) stop("injected publish failure", call. = FALSE)
+      file.copy(staged.file, replacement.file, overwrite = TRUE, copy.date = TRUE)
+    }
+    expect_error(
+      autoshud_step3_enforce_local_forcing_window(sp.forc, xfg = xfg,
+                                                  years = xfg$years,
+                                                  forcing.dir = forc.dir,
+                                                  publish.fun = fail.second),
+      "injected publish failure"
+    )
+    after.hash <- vapply(files, hash_file, character(1))
+    expect_equal(after.hash, before.hash)
+  })
+
+  test_that("Step3 local forcing rejects configured CSV resource limits", {
+    tmp <- tempfile("local-forcing-limits-")
+    forc.dir <- file.path(tmp, "forcing")
+    dir.create(forc.dir, recursive = TRUE, showWarnings = FALSE)
+    sp.forc <- sf::st_as_sf(
+      data.frame(ID = 1L, Filename = "limited.csv", x = 0, y = 0),
+      coords = c("x", "y"), crs = 4326
+    )
+    dates <- seq(as.Date("2001-01-01"), as.Date("2001-01-10"), by = "day")
+
+    write_tsd_fixture(file.path(forc.dir, "limited.csv"), dates)
+    expect_error(
+      autoshud_step3_enforce_local_forcing_window(
+        sp.forc,
+        xfg = list(years = 2001, dir = list(forc = forc.dir),
+                   para = list(STARTDAY = 0, ENDDAY = 4,
+                               local.forcing.max.rows = 5)),
+        years = 2001, forcing.dir = forc.dir
+      ),
+      "row limit"
+    )
+
+    write_tsd_fixture(file.path(forc.dir, "limited.csv"), dates)
+    expect_error(
+      autoshud_step3_enforce_local_forcing_window(
+        sp.forc,
+        xfg = list(years = 2001, dir = list(forc = forc.dir),
+                   para = list(STARTDAY = 0, ENDDAY = 4,
+                               local.forcing.max.cols = 3)),
+        years = 2001, forcing.dir = forc.dir
+      ),
+      "column limit"
+    )
+
+    write_tsd_fixture(file.path(forc.dir, "limited.csv"), dates)
+    expect_error(
+      autoshud_step3_enforce_local_forcing_window(
+        sp.forc,
+        xfg = list(years = 2001, dir = list(forc = forc.dir),
+                   para = list(STARTDAY = 0, ENDDAY = 4,
+                               local.forcing.max.bytes = 10)),
+        years = 2001, forcing.dir = forc.dir
+      ),
+      "byte limit"
+    )
   })
 
   test_that("Step3 local forcing fails safely on unparseable CSV", {

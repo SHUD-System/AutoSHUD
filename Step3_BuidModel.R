@@ -143,10 +143,7 @@ if( xfg$iforcing < 1 ){
     dem = dem.forc, wbd = wbd.forc))
 }else{
   sp.forc = sf::st_read(xfg$fsp.forc, quiet = TRUE)
-  if ('ID' %in% names(sp.forc)) {
-    sp.forc$ID = autoshud_step3_validate_forcing_ids(sp.forc$ID,
-                                                     forcing.dir = xfg$dir$forc)
-  }
+  sp.forc = autoshud_step3_assign_site_ids(sp.forc, forcing.dir = xfg$dir$forc)
   sp.forc = sf::st_as_sf(autoshud_step3_forcing_coverage(
     sp.meteoSite = as(sp.forc, 'Spatial'), pcs = pcs.forc, gcs = gcs.forc,
     dem = dem.forc, wbd = wbd.forc))
