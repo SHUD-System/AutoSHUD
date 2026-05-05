@@ -55,6 +55,20 @@ read.prj <- function(fn.prj){
   # dir.rawdata=getVAL(xcfg, 'dir.rawdata')
   
   dir.ldas = getVAL(xcfg, 'dir.ldas')
+  dir.era5 = getVAL(xcfg, 'dir.era5', defVal = dir.ldas)
+  era5.buffer.deg = getVAL(xcfg, 'era5.buffer.deg', TRUE, defVal = 0)
+  era5.lon.mode = getVAL(xcfg, 'era5.lon.mode', defVal = 'auto')
+  era5.file.pattern = getVAL(xcfg, 'era5.file.pattern')
+  era5.max.sites = getVAL(xcfg, 'era5.max.sites', TRUE)
+  era5.max.timesteps = getVAL(xcfg, 'era5.max.timesteps', TRUE)
+  era5.max.vars = getVAL(xcfg, 'era5.max.vars', TRUE)
+  era5.max.files = getVAL(xcfg, 'era5.max.files', TRUE)
+  era5.max.discovery.depth = getVAL(xcfg, 'era5.max.discovery.depth')
+  era5.max.discovery.entries = getVAL(xcfg, 'era5.max.discovery.entries', TRUE)
+  era5.max.discovery.dirs = getVAL(xcfg, 'era5.max.discovery.dirs', TRUE)
+  era5.max.bytes = getVAL(xcfg, 'era5.max.bytes', TRUE)
+  era5.max.read.bytes = getVAL(xcfg, 'era5.max.read.bytes', TRUE)
+  era5.time.chunk = getVAL(xcfg, 'era5.time.chunk', TRUE)
   dir.out = getVAL(xcfg, 'dir.out')
   dout.forc = getVAL(xcfg, 'dout.forc')
   
@@ -95,12 +109,12 @@ read.prj <- function(fn.prj){
       crs.pcs <- sf::st_crs(sf::st_read(crs.fn, quiet = TRUE))$wkt
     }else{
       message('CRS file is missing. So Albers projection is used')
-      crs.pcs <- sf::st_crs(rSHUD::crs.Albers(sf::st_read(fsp.wbd, quiet = TRUE)))$wkt
+      crs.pcs <- sf::st_crs(rSHUD::crs.Albers(as(sf::st_read(fsp.wbd, quiet = TRUE), 'Spatial')))$wkt
       message(crs.pcs)
     }
   }else{
     message('CRS file is missing. So Albers projection is used')
-    crs.pcs <- sf::st_crs(rSHUD::crs.Albers(sf::st_read(fsp.wbd, quiet = TRUE)))$wkt
+    crs.pcs <- sf::st_crs(rSHUD::crs.Albers(as(sf::st_read(fsp.wbd, quiet = TRUE), 'Spatial')))$wkt
     message(crs.pcs)
   }
   
@@ -223,9 +237,26 @@ read.prj <- function(fn.prj){
   }
   if(iforcing < 1){
     # res = getVAL(xcfg, 'res', real = TRUE)
+    era5.cfg = list(
+      'buffer.deg' = era5.buffer.deg,
+      'lon.mode' = era5.lon.mode,
+      'file.pattern' = era5.file.pattern,
+      'max.sites' = era5.max.sites,
+      'max.timesteps' = era5.max.timesteps,
+      'max.vars' = era5.max.vars,
+      'max.files' = era5.max.files,
+      'max.discovery.depth' = era5.max.discovery.depth,
+      'max.discovery.entries' = era5.max.discovery.entries,
+      'max.discovery.dirs' = era5.max.discovery.dirs,
+      'max.bytes' = era5.max.bytes,
+      'max.read.bytes' = era5.max.read.bytes,
+      'time.chunk' = era5.time.chunk
+    )
     cfg = c(cfg, 
             # 'res' = res,
-            'dir.ldas' = dir.ldas
+            'dir.ldas' = dir.ldas,
+            'dir.era5' = dir.era5,
+            'era5' = list(era5.cfg)
     )
   }else{
     

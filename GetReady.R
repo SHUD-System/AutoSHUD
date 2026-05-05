@@ -89,3 +89,19 @@ library(hydroTSM)
 library(hydroGOF)
 library(xts)
 fig.type='cairo'
+
+resolve_rshud_function <- function(snake, dotted) {
+  ns <- asNamespace('rSHUD')
+  if (exists(snake, where = ns, mode = 'function', inherits = FALSE)) {
+    return(get(snake, envir = ns, mode = 'function', inherits = FALSE))
+  }
+  if (exists(dotted, where = ns, mode = 'function', inherits = FALSE)) {
+    return(get(dotted, envir = ns, mode = 'function', inherits = FALSE))
+  }
+  stop('rSHUD export is missing: expected ', snake, ' or ', dotted, call. = FALSE)
+}
+
+write_tsd <- resolve_rshud_function('write_tsd', 'write.tsd')
+write_forc <- resolve_rshud_function('write_forc', 'write.forc')
+write_df <- resolve_rshud_function('write_df', 'write.df')
+read_df <- resolve_rshud_function('read_df', 'read.df')
