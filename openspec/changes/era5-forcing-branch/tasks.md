@@ -66,3 +66,10 @@
 - [x] End-to-end scenario: classic Step1-Step3 ERA5 path.
   - Input: small fixture project with watershed GIS and synthetic ERA5 NetCDF data for one or two days.
   - Expected output: Step2 writes forcing CSVs and meteo shapefiles; Step3 builds forcing coverage and model forcing metadata without requiring external ERA5 preprocessing.
+
+## Phase 7 Review Fixes
+
+- [x] Validate every ERA5 NetCDF file uses the same longitude and latitude coordinate grid as the first selected file before reading site variables.
+  - Regression: two synthetic daily files with reordered longitude coordinates fail fast with a `longitude grid mismatch` error naming the second file and do not publish final outputs.
+- [x] Stage ERA5 CSV and meteoCov shapefile outputs in the run temp directory and publish final meteoCov only after staged CSV publication succeeds.
+  - Regression: an internal test-only copy hook injects final CSV publish failure and asserts existing final `meteoCov` shapefiles remain unchanged.

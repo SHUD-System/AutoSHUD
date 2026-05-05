@@ -68,6 +68,12 @@ skip_if <- function(condition, name, reason) {
   FALSE
 }
 
+restore_option <- function(name, value) {
+  opts <- list(value)
+  names(opts) <- name
+  do.call(options, opts)
+}
+
 read_tsd_file <- function(file) {
   lines <- readLines(file, warn = FALSE)
   header <- strsplit(lines[[2]], "\t")[[1]]
@@ -148,6 +154,18 @@ make_era5_context <- function(tmp, bbox = c(xmin = -105.2, xmax = -104.8, ymin =
               dir = list(forc = forc.dir), era5 = era5, crs.pcs = crs.pcs,
               crs.gcs = sf::st_crs(4326), iforcing = 0.7)
   list(xfg = xfg, pd.gcs = pd.gcs, pd.pcs = pd.pcs, era5.dir = era5.dir, forc.dir = forc.dir)
+}
+
+write_test_meteo_cov <- function(file, id, lon = -999, lat = -999, crs = 4326) {
+  era5_require_namespace("sf")
+  dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+  meta <- data.frame(ID = id, xcenter = lon, ycenter = lat, lon_idx = 99L, lat_idx = 99L)
+  shp <- sf::st_as_sf(meta, coords = c("xcenter", "ycenter"), remove = FALSE, crs = 4326)
+  if (!identical(sf::st_crs(crs)$wkt, sf::st_crs(4326)$wkt)) {
+    shp <- sf::st_transform(shp, crs)
+  }
+  sf::st_write(shp, dsn = file, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
+  invisible(file)
 }
 
 run_classic_step3_metadata <- function(xfg, pd.pcs, forc.file) {
@@ -377,6 +395,56 @@ if (all(have[c("ncdf4", "sf", "xts")])) {
     expect_equal(out$Precip_mm.d, c(24, 48, 24, 72), tolerance = 1e-6)
     expect_equal(out$RN_w.m2, c(1, 1, 0.5, 1), tolerance = 1e-6)
     expect_true(all(out$Precip_mm.d >= 0 & out$RN_w.m2 >= 0))
+  })
+
+  test_that("ERA5 rejects later files with mismatched coordinate grids before output", {
+    tmp <- tempfile("era5-grid-mismatch-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00, 255.25), c(40.00), 0:1,
+            var.values = make_var_values(c(2, 1, 2), tp = c(0.001, 0.002, 0.003, 0.004),
+                                         ssr = c(3600, 7200, 10800, 14400)))
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010102.nc"), c(255.25, 255.00), c(40.00), 2:3,
+            var.values = make_var_values(c(2, 1, 2), tp = c(0.005, 0.006, 0.007, 0.008),
+                                         ssr = c(18000, 21600, 25200, 28800)))
+    msg <- expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs), "longitude grid mismatch")
+    expect_true(grepl("ERA5_20010102.nc", msg, fixed = TRUE),
+                "grid mismatch error must name the mismatched file")
+    final.csv <- list.files(ctx$forc.dir, pattern = "\\.csv$", full.names = TRUE)
+    expect_equal(length(final.csv), 0L)
+    expect_true(!file.exists(ctx$pd.gcs$meteoCov), "GCS meteoCov must not be published on grid mismatch")
+    expect_true(!file.exists(ctx$pd.pcs$meteoCov), "PCS meteoCov must not be published on grid mismatch")
+  })
+
+  test_that("ERA5 CSV publish failure leaves final meteoCov shapefiles unchanged", {
+    tmp <- tempfile("era5-publish-failure-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    write_test_meteo_cov(ctx$pd.gcs$meteoCov, "OLD_GCS")
+    write_test_meteo_cov(ctx$pd.pcs$meteoCov, "OLD_PCS")
+    vals <- make_var_values(c(1, 1, 2), tp = c(0.001, 0.002), ssr = c(3600, 7200))
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1, var.values = vals)
+
+    old.copy <- getOption("autoshud.era5.file.copy")
+    options(autoshud.era5.file.copy = function(from, to, overwrite = TRUE) {
+      fail <- grepl("\\.csv$", basename(to)) & !startsWith(basename(to), ".")
+      out <- rep(FALSE, length(to))
+      if (any(!fail)) {
+        out[!fail] <- file.copy(from[!fail], to[!fail], overwrite = overwrite)
+      }
+      out
+    })
+
+    tryCatch(
+      expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs), "failed to publish forcing CSV files"),
+      finally = restore_option("autoshud.era5.file.copy", old.copy)
+    )
+    final.csv <- list.files(ctx$forc.dir, pattern = "\\.csv$", full.names = TRUE)
+    expect_equal(length(final.csv), 0L)
+    g <- sf::st_read(ctx$pd.gcs$meteoCov, quiet = TRUE)
+    p <- sf::st_read(ctx$pd.pcs$meteoCov, quiet = TRUE)
+    expect_equal(g$ID, "OLD_GCS")
+    expect_equal(p$ID, "OLD_PCS")
   })
 
   test_that("ERA5 converter writes CSV schema and meteo shapefile metadata", {
