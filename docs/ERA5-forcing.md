@@ -11,13 +11,14 @@ Required keys:
 
 ```text
 Forcing 0.7
-dir.era5 /path/to/era5/netcdf
 dout.forc /path/to/output/forcing
+dir.era5 /path/to/era5/netcdf
 ```
 
-`dir.era5` defaults to `dir.ldas` when it is omitted, so existing LDAS-style
-configuration files can be adapted by changing only `Forcing` when the ERA5
-files live under the same root.
+`dir.era5` defaults to `dir.ldas` when it is omitted. In practice, the required
+configuration is `Forcing`, `dout.forc`, and either `dir.era5` or `dir.ldas`.
+Existing LDAS-style configuration files can be adapted by changing only
+`Forcing` when the ERA5 files live under the same root.
 
 Optional ERA5 keys:
 

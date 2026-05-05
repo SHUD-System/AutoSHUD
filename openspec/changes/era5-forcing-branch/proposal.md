@@ -38,5 +38,7 @@ This change adds an official ERA5 forcing branch so classic AutoSHUD can generat
 - Generated CSV files satisfy classic SHUD solver expectations for the first five forcing variables while preserving optional ERA5 diagnostics consistently.
 - `tp` and `ssr` cumulative fields are differenced correctly across day and file boundaries, with non-negative precipitation and radiation outputs.
 - Relative humidity is clipped to `0-1`; wind speed, precipitation, and radiation outputs are non-negative.
-- Step1 through Step3 can complete without relying on external ERA5 preprocessing scripts.
+- Acceptance cases provide the Step1 artifacts needed by forcing conversion,
+  then verify Step2 ERA5 dispatch and classic Step3 forcing metadata without
+  relying on external ERA5 preprocessing scripts.
 - Documentation explains that this branch generates classic SHUD CSV forcing and is separate from SHUD-NC `FORCING_MODE=NETCDF`.

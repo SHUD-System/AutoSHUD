@@ -413,6 +413,30 @@ if (all(have[c("ncdf4", "sf", "xts")])) {
     expect_error(era5_discover_files(root, 2001), "symlink")
   })
 
+  test_that("ERA5 discovery rejects symlink directories before traversal", {
+    tmp <- tempfile("era5-discovery-symlink-dir-")
+    dir.create(tmp)
+    root <- file.path(tmp, "era5")
+    outside <- file.path(tmp, "outside")
+    dir.create(root, recursive = TRUE)
+    dir.create(outside, recursive = TRUE)
+    make_nc(file.path(outside, "ERA5_20010101.nc"), c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2)))
+    make_nc(file.path(outside, "ERA5_20010102.nc"), c(255.00), c(40.00), 2:3,
+            var.values = make_var_values(c(1, 1, 2)))
+    link <- file.path(root, "linked-outside")
+    if (skip_if(!file.symlink(outside, link),
+                "ERA5 discovery rejects symlink directories before traversal",
+                "test platform does not support file.symlink")) return(invisible(TRUE))
+    msg <- expect_error(
+      era5_discover_files(root, 2001, limits = era5_read_limits(list(max.files = 1))),
+      "symlink|outside root"
+    )
+    expect_true(grepl("symlink|outside root", msg), "must reject link before counting outside files")
+    expect_true(!grepl("era5.max.files", msg, fixed = TRUE),
+                "must not traverse/count NetCDF files inside outside symlink target")
+  })
+
   test_that("ERA5 discovery enforces max files", {
     tmp <- tempfile("era5-discovery-max-files-")
     dir.create(tmp)

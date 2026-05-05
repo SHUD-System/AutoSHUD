@@ -699,15 +699,70 @@ era5_validate_discovered_files <- function(files, root.norm, limits,
   stats::setNames(resolved, NULL)
 }
 
+era5_discovery_is_netcdf <- function(path) {
+  grepl("\\.(nc|nc4)$", basename(path))
+}
+
+era5_validate_discovery_child <- function(path, root.norm, limits,
+                                          label = "discovered ERA5 path") {
+  era5_validate_existing_under_root(path, root.norm, label,
+                                    allow.symlinks = limits$allow.symlinks,
+                                    allow.outside.root = limits$allow.outside.root)
+}
+
+era5_discover_files_walk <- function(root.norm, limits) {
+  queue.path <- root.norm
+  queue.depth <- 0L
+  seen.dirs <- character()
+  found <- character()
+  max.depth <- limits$max.discovery.depth
+
+  while (length(queue.path)) {
+    current <- queue.path[[1]]
+    depth <- queue.depth[[1]]
+    queue.path <- queue.path[-1]
+    queue.depth <- queue.depth[-1]
+
+    current.norm <- era5_validate_existing_under_root(
+      current, root.norm, "ERA5 discovery directory",
+      allow.symlinks = limits$allow.symlinks,
+      allow.outside.root = limits$allow.outside.root
+    )
+    if (current.norm %in% seen.dirs) next
+    seen.dirs <- c(seen.dirs, current.norm)
+
+    children <- list.files(current.norm, all.files = TRUE, no.. = TRUE,
+                           full.names = TRUE)
+    if (!length(children)) next
+    children <- sort(children)
+
+    for (child in children) {
+      child.norm <- era5_validate_discovery_child(child, root.norm, limits)
+      if (dir.exists(child)) {
+        if (!is.finite(max.depth) || depth < max.depth) {
+          queue.path <- c(queue.path, child.norm)
+          queue.depth <- c(queue.depth, depth + 1L)
+        }
+      } else if (file.exists(child) && era5_discovery_is_netcdf(child)) {
+        found <- unique(c(found, child.norm))
+        if (length(found) > limits$max.files) {
+          era5_stop("discovered ERA5 NetCDF file count (", length(found),
+                    ") exceeds era5.max.files limit (", limits$max.files, ").")
+        }
+      }
+    }
+  }
+
+  stats::setNames(found, NULL)
+}
+
 era5_discover_files <- function(dir.era5, years, pattern = NULL, limits = era5_read_limits()) {
   if (is.null(dir.era5) || !nzchar(dir.era5) || !dir.exists(dir.era5)) {
     era5_stop("ERA5 directory is missing or does not exist: ", dir.era5 %||% "<NULL>", ".")
   }
   dir.norm <- era5_normalize_existing_path(dir.era5, "ERA5 directory")
   years <- as.character(years)
-  all.files <- list.files(dir.era5, pattern = "\\.(nc|nc4)$", recursive = TRUE, full.names = TRUE)
-  all.files <- era5_validate_discovered_files(all.files, dir.norm, limits)
-  all.files <- era5_filter_discovery_depth(all.files, dir.norm, limits$max.discovery.depth)
+  all.files <- era5_discover_files_walk(dir.norm, limits)
   if (length(pattern) && !is.na(pattern) && nzchar(pattern)) {
     picked <- character()
     has.year.token <- grepl("\\{year\\}|%Y", pattern)
