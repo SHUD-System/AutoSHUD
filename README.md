@@ -2,6 +2,8 @@
 
 SHUD = Simulator of Hydrologic Unstructured Domains, [https://shud.xyz](https://shud.xyz).
 
+中文版本：[README_cn.md](README_cn.md).
+
 ## Version Policy
 
 - **Current release target**: AutoSHUD `v2.5.0` release candidate.
