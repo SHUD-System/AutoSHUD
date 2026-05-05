@@ -97,8 +97,12 @@ hash_files <- function(files) {
 }
 
 expected_step3_site_ids <- function(sp.forc) {
-  if ("ID" %in% names(sp.forc) && any(nzchar(as.character(sp.forc$ID)))) {
-    as.character(sp.forc$ID)
+  if ("ID" %in% names(sp.forc)) {
+    id <- as.character(sp.forc$ID)
+    fallback <- paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
+    use.fallback <- is.na(id) | !nzchar(id)
+    id[use.fallback] <- fallback[use.fallback]
+    id
   } else {
     paste0("X", sp.forc$xcenter, "Y", sp.forc$ycenter)
   }
@@ -709,11 +713,16 @@ if (all(have[c("ncdf4", "sf", "xts", "rSHUD", "raster", "sp")])) {
                 crs.pcs = sf::st_crs(4326)$wkt, crs.gcs = sf::st_crs(4326))
     era5_nc2csv(xfg, pd.gcs, pd.pcs)
     sp.forc <- sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
-    sp.forc$ID <- paste0("custom_site_", seq_len(nrow(sp.forc)))
+    sp.forc$ID <- rep(NA_character_, nrow(sp.forc))
+    sp.forc$ID[1] <- "custom_site_1"
+    if (nrow(sp.forc) > 1) sp.forc$ID[2] <- ""
     sf::st_write(sp.forc, dsn = pd.pcs$meteoCov, driver = "ESRI Shapefile",
                  delete_dsn = TRUE, quiet = TRUE)
     sp.forc <- sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
-    sp.forc$ID <- expected_step3_site_ids(sp.forc)
+    expected.ids <- expected_step3_site_ids(sp.forc)
+    expect_equal(expected.ids[1], "custom_site_1")
+    expect_equal(expected.ids[-1], paste0("X", sp.forc$xcenter[-1], "Y", sp.forc$ycenter[-1]))
+    sp.forc$ID <- expected.ids
     sp.c <- sf::st_centroid(sp.forc)["ID"]
     dem <- raster::raster(nrows = 4, ncols = 4, xmn = -105.5, xmx = -104.5, ymn = 39.5, ymx = 40.5,
                           crs = sp::CRS("+init=epsg:4326"))
@@ -731,6 +740,7 @@ if (all(have[c("ncdf4", "sf", "xts", "rSHUD", "raster", "sp")])) {
     expect_true(file.exists(forc.file))
     forc.lines <- readLines(forc.file, warn = FALSE)
     expect_true(any(grepl("custom_site_1.csv", forc.lines, fixed = TRUE)))
+    expect_true(any(grepl(paste0(expected.ids[-1], ".csv"), forc.lines, fixed = TRUE)))
   })
 
   test_that("Synthetic case1-US acceptance uses real Step2 dispatch and Step3 metadata", {

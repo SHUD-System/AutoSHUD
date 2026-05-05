@@ -129,8 +129,12 @@ if( xfg$iforcing < 1 ){
   }else{
     sp.forc = sf::st_read(pd.pcs$meteoCov, quiet = TRUE)
   }
-  if ('ID' %in% names(sp.forc) && any(nzchar(as.character(sp.forc$ID)))) {
+  if ('ID' %in% names(sp.forc)) {
     ID = as.character(sp.forc$ID)
+    fallback.ID = paste0('X', (sp.forc$xcenter),
+                         'Y', (sp.forc$ycenter))
+    use.fallback = is.na(ID) | !nzchar(ID)
+    ID[use.fallback] = fallback.ID[use.fallback]
   } else {
     ID = paste0('X', (sp.forc$xcenter),
                 'Y', (sp.forc$ycenter))
