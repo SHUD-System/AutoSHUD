@@ -60,6 +60,20 @@ expect_error <- function(expr, pattern) {
   invisible(msg)
 }
 
+expect_warning <- function(expr, pattern) {
+  msg <- NA_character_
+  value <- withCallingHandlers(
+    force(expr),
+    warning = function(w) {
+      msg <<- conditionMessage(w)
+      invokeRestart("muffleWarning")
+    }
+  )
+  if (is.na(msg)) stop("expected warning matching ", pattern, call. = FALSE)
+  if (!grepl(pattern, msg)) stop("warning did not match ", pattern, ": ", msg, call. = FALSE)
+  invisible(value)
+}
+
 skip_if <- function(condition, name, reason) {
   if (isTRUE(condition)) {
     skip(name, reason)
@@ -298,6 +312,45 @@ test_that("Step2 dispatch calls ERA5 converter only", {
   expect_equal(calls, 1L)
 })
 
+if (requireNamespace("sf", quietly = TRUE)) {
+  test_that("Step2 NLDAS dispatch prepares legacy meteo coverage before converter", {
+    source("Rfunction/Step2_ForcingDispatch.R")
+    tmp <- tempfile("nldas-dispatch-")
+    dir.create(tmp)
+    wbd <- make_wbd(file.path(tmp, "gcs", "wbd_buf.shp"),
+                    bbox = c(xmin = -105.05, xmax = -104.95, ymin = 39.95, ymax = 40.05))
+    pd.gcs <- list(wbd.buf = wbd,
+                   meteoCov = file.path(tmp, "gcs", "meteoCov.shp"))
+    pd.pcs <- list(meteoCov = file.path(tmp, "pcs", "meteoCov.shp"))
+    xfg <- list(iforcing = 0.4, crs.gcs = sf::st_crs(4326),
+                crs.pcs = sf::st_crs(4326)$wkt,
+                dir = list(fig = file.path(tmp, "fig")))
+    dir.create(xfg$dir$fig, recursive = TRUE)
+    calls <- character()
+    old.source <- getOption("autoshud.step2.source")
+    options(autoshud.step2.source = function(file, env) {
+      calls <<- c(calls, file)
+      if (identical(file, "Rfunction/NLDAS_nc2RDS.R")) {
+        expect_true(file.exists(pd.gcs$meteoCov), "GCS meteoCov must exist before NLDAS converter")
+        expect_true(file.exists(pd.pcs$meteoCov), "PCS meteoCov must exist before NLDAS converter")
+        g <- sf::st_read(pd.gcs$meteoCov, quiet = TRUE)
+        expect_true(nrow(g) > 0, "NLDAS coverage must contain fishnet cells")
+        local.xfg <- get("xfg", envir = env)
+        expect_equal(local.xfg$res, 0.125)
+      }
+      invisible(TRUE)
+    })
+    tryCatch(
+      autoshud_step2_dispatch_forcing(xfg, pd.gcs, pd.pcs),
+      finally = restore_option("autoshud.step2.source", old.source)
+    )
+    expect_true("Rfunction/NLDAS_nc2RDS.R" %in% calls)
+    expect_true(!("Rfunction/ERA5_NC2CSV.R" %in% calls), "NLDAS must not invoke ERA5 converter")
+  })
+} else {
+  skip("Step2 NLDAS dispatch prepares legacy meteo coverage before converter", "requires sf")
+}
+
 test_that("ERA5 grid selection uses bbox and buffer", {
   bbox <- c(xmin = -105.2, xmax = -104.8, ymin = 39.8, ymax = 40.2)
   lon <- c(-105.75, -105.25, -105.00, -104.75, -104.25)
@@ -323,6 +376,19 @@ test_that("ERA5 -180..180 longitude handling matches 0-360", {
   expect_equal(a$ID, b$ID)
 })
 
+test_that("ERA5 grid selection preflights max sites before grid construction", {
+  bbox <- c(xmin = -180, xmax = 180, ymin = -90, ymax = 90)
+  lon <- seq(-179.95, 179.95, length.out = 2000)
+  lat <- seq(-89.95, 89.95, length.out = 2000)
+  limits <- era5_read_limits(list(max.sites = 10))
+  msg <- expect_error(
+    era5_select_grid(lon, lat, bbox, limits = limits),
+    "era5.max.sites"
+  )
+  expect_true(grepl("4000000", msg, fixed = TRUE),
+              "selection error must report full candidate count without building it")
+})
+
 test_that("ERA5 unit conversions produce SHUD columns", {
   time <- as.POSIXct(c("2001-01-01 00:00:00", "2001-01-01 01:00:00"), tz = "UTC")
   raw <- list(tp = c(0.001, 0.003), t2m = c(273.15, 293.15), d2m = c(273.15, 283.15),
@@ -335,6 +401,15 @@ test_that("ERA5 unit conversions produce SHUD columns", {
   expect_equal(out$Wind_m.s, c(5, 5), tolerance = 1e-6)
   expect_equal(out$RN_w.m2, c(1, 1), tolerance = 1e-6)
   expect_equal(out$Pres_pa, c(100000, 99999))
+})
+
+test_that("ERA5 negative cumulative increments are clipped and reported", {
+  inc <- expect_warning(
+    era5_cumulative_increment(c(-0.001, -0.003, 0.001), label = "tp at X1Y2"),
+    "clipped 2 negative cumulative increment\\(s\\).*tp at X1Y2.*first index 1"
+  )
+  expect_equal(inc, c(0, 0, 0.004), tolerance = 1e-12)
+  expect_true(all(inc >= 0))
 })
 
 test_that("ERA5 cumulative precipitation differences across resets", {
@@ -465,6 +540,47 @@ if (all(have[c("ncdf4", "sf", "xts")])) {
     files <- era5_discover_files(root, 2001, limits = era5_read_limits(list(max.discovery.depth = 0)))
     expect_equal(length(files), 1L)
     expect_equal(basename(files), "ERA5_20010101.nc")
+  })
+
+  test_that("ERA5 discovery enforces traversed entry budget", {
+    tmp <- tempfile("era5-discovery-entry-budget-")
+    dir.create(tmp)
+    root <- file.path(tmp, "era5")
+    dir.create(root, recursive = TRUE)
+    for (i in seq_len(5)) {
+      writeLines("not nc", file.path(root, paste0("note", i, ".txt")))
+    }
+    expect_error(
+      era5_discover_files(root, 2001,
+                          limits = era5_read_limits(list(max.discovery.entries = 3))),
+      "era5.max.discovery.entries"
+    )
+  })
+
+  test_that("ERA5 discovery enforces traversed directory budget", {
+    tmp <- tempfile("era5-discovery-dir-budget-")
+    dir.create(tmp)
+    root <- file.path(tmp, "era5")
+    dir.create(file.path(root, "a", "b"), recursive = TRUE)
+    expect_error(
+      era5_discover_files(root, 2001,
+                          limits = era5_read_limits(list(max.discovery.dirs = 1))),
+      "era5.max.discovery.dirs"
+    )
+  })
+
+  test_that("ERA5 direct file pattern avoids full tree walk", {
+    tmp <- tempfile("era5-direct-pattern-")
+    dir.create(tmp)
+    root <- file.path(tmp, "era5")
+    target <- make_nc(file.path(root, "target_2001.nc"), c(255.00), c(40.00), 0:1,
+                      var.values = make_var_values(c(1, 1, 2)))
+    for (i in seq_len(5)) {
+      writeLines("not nc", file.path(root, paste0("extra", i, ".txt")))
+    }
+    files <- era5_discover_files(root, 2001, pattern = "target_2001.nc",
+                                 limits = era5_read_limits(list(max.discovery.entries = 1)))
+    expect_equal(files, normalizePath(target, winslash = "/", mustWork = TRUE))
   })
 
   test_that("ERA5 two-file cumulative tp and ssr boundaries handle non-reset", {

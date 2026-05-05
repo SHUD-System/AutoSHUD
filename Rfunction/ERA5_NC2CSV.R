@@ -9,6 +9,8 @@ ERA5_DEFAULT_LIMITS <- list(
   max.vars = 16,
   max.files = 10000,
   max.discovery.depth = Inf,
+  max.discovery.entries = 1000000,
+  max.discovery.dirs = 100000,
   max.bytes = 1024^3,
   max.read.bytes = 64 * 1024^2,
   time.chunk = 8192
@@ -146,6 +148,12 @@ era5_read_limits <- function(cfg = NULL) {
     max.files = get_limit("max.files", ERA5_DEFAULT_LIMITS$max.files, integer = TRUE),
     max.discovery.depth = get_depth("max.discovery.depth",
                                     ERA5_DEFAULT_LIMITS$max.discovery.depth),
+    max.discovery.entries = get_limit("max.discovery.entries",
+                                      ERA5_DEFAULT_LIMITS$max.discovery.entries,
+                                      integer = TRUE),
+    max.discovery.dirs = get_limit("max.discovery.dirs",
+                                  ERA5_DEFAULT_LIMITS$max.discovery.dirs,
+                                  integer = TRUE),
     max.bytes = get_limit("max.bytes", ERA5_DEFAULT_LIMITS$max.bytes),
     max.read.bytes = get_limit("max.read.bytes", ERA5_DEFAULT_LIMITS$max.read.bytes),
     time.chunk = get_limit("time.chunk", ERA5_DEFAULT_LIMITS$time.chunk, integer = TRUE),
@@ -170,6 +178,12 @@ era5_format_bytes <- function(bytes) {
   }
 }
 
+era5_format_count <- function(x) {
+  x <- as.numeric(x)
+  if (!is.finite(x)) return(as.character(x))
+  format(x, scientific = FALSE, trim = TRUE)
+}
+
 era5_estimate_bytes <- function(nsites, nt, nvars, bytes.per.value = 8) {
   as.numeric(nsites) * as.numeric(nt) * as.numeric(nvars) * bytes.per.value
 }
@@ -188,16 +202,19 @@ era5_guard_selection_size <- function(nsites, nt, nvars, limits, context = "sele
     era5_stop(context, " has no selected variables.")
   }
   if (nsites > limits$max.sites) {
-    era5_stop("selected sites (", nsites, ") exceed era5.max.sites limit (",
-              limits$max.sites, ") for ", context, ".")
+    era5_stop("selected sites (", era5_format_count(nsites),
+              ") exceed era5.max.sites limit (",
+              era5_format_count(limits$max.sites), ") for ", context, ".")
   }
   if (nt > limits$max.timesteps) {
-    era5_stop("selected timesteps (", nt, ") exceed era5.max.timesteps limit (",
-              limits$max.timesteps, ") for ", context, ".")
+    era5_stop("selected timesteps (", era5_format_count(nt),
+              ") exceed era5.max.timesteps limit (",
+              era5_format_count(limits$max.timesteps), ") for ", context, ".")
   }
   if (nvars > limits$max.vars) {
-    era5_stop("selected variables (", nvars, ") exceed era5.max.vars limit (",
-              limits$max.vars, ") for ", context, ".")
+    era5_stop("selected variables (", era5_format_count(nvars),
+              ") exceed era5.max.vars limit (",
+              era5_format_count(limits$max.vars), ") for ", context, ".")
   }
   bytes <- era5_estimate_bytes(nsites, nt, nvars)
   if (bytes > limits$max.bytes) {
@@ -386,7 +403,8 @@ era5_lon_intervals <- function(lon_min, lon_max, mode) {
   }
 }
 
-era5_select_grid <- function(lon, lat, bbox, buffer.deg = 0, lon.mode = "auto") {
+era5_select_grid <- function(lon, lat, bbox, buffer.deg = 0, lon.mode = "auto",
+                             limits = NULL, nt = 1L, nvars = 1L) {
   lon <- as.numeric(lon)
   lat <- as.numeric(lat)
   if (!length(lon) || !length(lat) || any(!is.finite(lon)) || any(!is.finite(lat))) {
@@ -404,6 +422,11 @@ era5_select_grid <- function(lon, lat, bbox, buffer.deg = 0, lon.mode = "auto") 
     era5_stop("no ERA5 grid points selected by bbox [",
               paste(era5_clean_number(bb), collapse = ", "),
               "] and era5.buffer.deg=", buffer.deg, ".")
+  }
+  nsites <- as.numeric(length(lon_idx)) * as.numeric(length(lat_idx))
+  if (!is.null(limits)) {
+    era5_guard_selection_size(nsites, nt, nvars, limits,
+                              context = "ERA5 grid selection")
   }
   grid <- expand.grid(lon_idx = sort(lon_idx), lat_idx = sort(lat_idx))
   grid$lon_src <- lon[grid$lon_idx]
@@ -552,7 +575,7 @@ era5_read_var_sites <- function(nc, var.name, sites, coord.names, limits = era5_
   out
 }
 
-era5_cumulative_increment <- function(values) {
+era5_cumulative_increment <- function(values, label = "cumulative variable") {
   values <- as.numeric(values)
   out <- numeric(length(values))
   if (!length(values)) return(out)
@@ -560,6 +583,12 @@ era5_cumulative_increment <- function(values) {
   if (length(values) > 1) {
     d <- diff(values)
     out[-1] <- ifelse(is.na(d), NA_real_, ifelse(d < 0, values[-1], d))
+  }
+  neg <- which(!is.na(out) & out < 0)
+  if (length(neg)) {
+    warning("ERA5 forcing: clipped ", length(neg),
+            " negative cumulative increment(s) to 0 for ", label,
+            "; first index ", neg[[1]], ".", call. = FALSE)
   }
   out <- pmax(out, 0, na.rm = FALSE)
   out
@@ -620,8 +649,8 @@ era5_convert_station <- function(raw, time, include.sp = TRUE, label = "station"
   }
   era5_validate_raw_station(raw, label = label)
   dt <- era5_elapsed_seconds(time)
-  tp.inc <- era5_cumulative_increment(raw$tp)
-  ssr.inc <- era5_cumulative_increment(raw$ssr)
+  tp.inc <- era5_cumulative_increment(raw$tp, label = paste0("tp at ", label))
+  ssr.inc <- era5_cumulative_increment(raw$ssr, label = paste0("ssr at ", label))
   out <- data.frame(
     Precip_mm.d = tp.inc * 1000 * 86400 / dt,
     Temp_C = as.numeric(raw$t2m) - 273.15,
@@ -716,6 +745,24 @@ era5_discover_files_walk <- function(root.norm, limits) {
   seen.dirs <- character()
   found <- character()
   max.depth <- limits$max.discovery.depth
+  entries.seen <- 0
+  dirs.seen <- 0
+
+  check_entries <- function() {
+    if (entries.seen > limits$max.discovery.entries) {
+      era5_stop("ERA5 discovery entry count (", entries.seen,
+                ") exceeds era5.max.discovery.entries limit (",
+                limits$max.discovery.entries, ").")
+    }
+  }
+
+  check_dirs <- function() {
+    if (dirs.seen > limits$max.discovery.dirs) {
+      era5_stop("ERA5 discovery directory count (", dirs.seen,
+                ") exceeds era5.max.discovery.dirs limit (",
+                limits$max.discovery.dirs, ").")
+    }
+  }
 
   while (length(queue.path)) {
     current <- queue.path[[1]]
@@ -730,11 +777,15 @@ era5_discover_files_walk <- function(root.norm, limits) {
     )
     if (current.norm %in% seen.dirs) next
     seen.dirs <- c(seen.dirs, current.norm)
+    dirs.seen <- dirs.seen + 1
+    check_dirs()
 
     children <- list.files(current.norm, all.files = TRUE, no.. = TRUE,
                            full.names = TRUE)
     if (!length(children)) next
     children <- sort(children)
+    entries.seen <- entries.seen + length(children)
+    check_entries()
 
     for (child in children) {
       child.norm <- era5_validate_discovery_child(child, root.norm, limits)
@@ -756,41 +807,68 @@ era5_discover_files_walk <- function(root.norm, limits) {
   stats::setNames(found, NULL)
 }
 
+era5_pattern_has_glob <- function(pattern) {
+  grepl("[*?]", pattern)
+}
+
+era5_discover_files_direct_pattern <- function(dir.era5, dir.norm, years, pattern, limits) {
+  picked <- character()
+  has.year.token <- grepl("\\{year\\}|%Y", pattern)
+  for (yr in years) {
+    pat <- gsub("\\{year\\}|%Y", yr, pattern)
+    direct <- if (file.exists(pat)) pat else file.path(dir.era5, pat)
+    f <- if (file.exists(direct)) direct else character()
+    f <- era5_validate_discovered_files(f, dir.norm, limits)
+    if (!has.year.token && length(f) && any(grepl(yr, f))) {
+      f <- f[grepl(yr, f)]
+    } else if (!has.year.token && length(years) > 1 && !any(grepl(yr, f))) {
+      f <- character()
+    }
+    if (!length(f)) {
+      era5_stop("no ERA5 NetCDF files found for year ", yr,
+                " using era5.file.pattern '", pattern, "'.")
+    }
+    picked <- c(picked, f)
+  }
+  unique(picked)
+}
+
 era5_discover_files <- function(dir.era5, years, pattern = NULL, limits = era5_read_limits()) {
   if (is.null(dir.era5) || !nzchar(dir.era5) || !dir.exists(dir.era5)) {
     era5_stop("ERA5 directory is missing or does not exist: ", dir.era5 %||% "<NULL>", ".")
   }
   dir.norm <- era5_normalize_existing_path(dir.era5, "ERA5 directory")
   years <- as.character(years)
-  all.files <- era5_discover_files_walk(dir.norm, limits)
   if (length(pattern) && !is.na(pattern) && nzchar(pattern)) {
-    picked <- character()
     has.year.token <- grepl("\\{year\\}|%Y", pattern)
-    for (yr in years) {
-      pat <- gsub("\\{year\\}|%Y", yr, pattern)
-      if (grepl("[*?]", pat)) {
+    expanded <- vapply(years, function(yr) gsub("\\{year\\}|%Y", yr, pattern),
+                       character(1))
+    if (!any(era5_pattern_has_glob(expanded))) {
+      files <- era5_discover_files_direct_pattern(dir.era5, dir.norm, years, pattern, limits)
+    } else {
+      all.files <- era5_discover_files_walk(dir.norm, limits)
+      picked <- character()
+      for (yr in years) {
+        pat <- gsub("\\{year\\}|%Y", yr, pattern)
         rx <- glob2rx(pat)
         rel <- sub(paste0("^", era5_regex_escape(dir.norm), "/?"), "",
                    normalizePath(all.files, mustWork = FALSE))
         f <- all.files[grepl(rx, basename(all.files)) | grepl(rx, rel)]
-      } else {
-        direct <- if (file.exists(pat)) pat else file.path(dir.era5, pat)
-        f <- if (file.exists(direct)) direct else character()
-        f <- era5_validate_discovered_files(f, dir.norm, limits)
+        if (!has.year.token && length(f) && any(grepl(yr, f))) {
+          f <- f[grepl(yr, f)]
+        } else if (!has.year.token && length(years) > 1 && !any(grepl(yr, f))) {
+          f <- character()
+        }
+        if (!length(f)) {
+          era5_stop("no ERA5 NetCDF files found for year ", yr,
+                    " using era5.file.pattern '", pattern, "'.")
+        }
+        picked <- c(picked, f)
       }
-      if (!has.year.token && length(f) && any(grepl(yr, f))) {
-        f <- f[grepl(yr, f)]
-      } else if (!has.year.token && length(years) > 1 && !any(grepl(yr, f))) {
-        f <- character()
-      }
-      if (!length(f)) {
-        era5_stop("no ERA5 NetCDF files found for year ", yr,
-                  " using era5.file.pattern '", pattern, "'.")
-      }
-      picked <- c(picked, f)
+      files <- unique(picked)
     }
-    files <- unique(picked)
   } else {
+    all.files <- era5_discover_files_walk(dir.norm, limits)
     files <- all.files[grepl(paste(years, collapse = "|"), all.files)]
     missing.years <- years[!vapply(years, function(yr) any(grepl(yr, files)), logical(1))]
     if (length(missing.years)) {
@@ -1303,7 +1381,9 @@ era5_nc2csv <- function(xfg, pd.gcs, pd.pcs) {
   bbox <- era5_bbox_vector(wbd.buf)
   sites <- era5_select_grid(coords$lon, coords$lat, bbox,
                             buffer.deg = xfg$era5$buffer.deg %||% 0,
-                            lon.mode = xfg$era5$lon.mode %||% "auto")
+                            lon.mode = xfg$era5$lon.mode %||% "auto",
+                            limits = limits, nt = length(coords$time),
+                            nvars = length(ERA5_REQUIRED_VARS))
   era5_guard_selection_size(nrow(sites), length(coords$time), length(ERA5_REQUIRED_VARS), limits,
                             context = "first ERA5 file selection")
   ncdf4::nc_close(nc)
