@@ -9,6 +9,7 @@
 # 8.
 rm(list=ls())
 source('GetReady.R')
+source('Rfunction/Step3_ForcingHardening.R')
 # source('Rfunction/SoilGeol.R')
 # source('Rfunction/fun.LAIRL.R')
 # source('Rfunction/fun.Meteo.R')
@@ -112,67 +113,10 @@ go.png <- function(){
   dev.off()
 }; go.png()
 # ======FORCING FILE======================
-to_sp_crs <- function(crs) {
-  if (inherits(crs, 'CRS')) {
-    crs
-  } else {
-    sp::CRS(SRS_string = sf::st_crs(crs)$wkt)
-  }
-}
-pcs.forc = to_sp_crs(xfg$crs.pcs)
-gcs.forc = to_sp_crs(xfg$crs.gcs)
+pcs.forc = autoshud_step3_forcing_crs(xfg$crs.pcs, label = 'projected CRS')
+gcs.forc = autoshud_step3_forcing_crs(xfg$crs.gcs, label = 'geographic CRS')
 dem.forc = raster::raster(pd.pcs$dem)
 wbd.forc = as(wbd, 'Spatial')
-autoshud_step3_validate_forcing_ids <- function(id, forcing.dir = NULL) {
-  id = as.character(id)
-  bad = rep(FALSE, length(id))
-  reason = rep('', length(id))
-
-  flag <- function(x) {
-    x[is.na(x)] = FALSE
-    x
-  }
-  mark <- function(idx, why) {
-    idx = flag(idx)
-    if (!any(idx)) return(invisible(NULL))
-    reason[idx & !bad] <<- why
-    bad[idx] <<- TRUE
-    invisible(NULL)
-  }
-
-  mark(is.na(id) | !nzchar(trimws(id)), 'empty')
-  mark(grepl('[[:cntrl:]]', id), 'control character')
-  mark(grepl('[/\\\\]', id), 'path separator')
-  mark(id %in% c('.', '..') | grepl('(^|[/\\\\])\\.\\.($|[/\\\\])', id),
-       "'..' path component")
-  mark(grepl('^[[:alpha:]][[:alnum:].+-]*:', id) | startsWith(id, '~'),
-       'absolute or path-like form')
-
-  filename = paste0(id, '.csv')
-  mark(dirname(filename) != '.' | basename(filename) != filename,
-       'escapes forcing directory')
-  if (!is.null(forcing.dir) && length(forcing.dir) > 0 &&
-      !is.na(forcing.dir[[1]]) && nzchar(forcing.dir[[1]])) {
-    root = sub('/+$', '', normalizePath(forcing.dir[[1]], winslash = '/',
-                                        mustWork = FALSE))
-    candidate = sub('/+$', '', normalizePath(file.path(root, filename),
-                                             winslash = '/', mustWork = FALSE))
-    mark(!(identical(dirname(candidate), root) |
-             startsWith(candidate, paste0(root, '/'))),
-         'escapes forcing directory')
-  }
-
-  if (any(bad)) {
-    details = paste(utils::head(paste0(encodeString(id[bad], quote = "'"),
-                                       ' (', reason[bad], ')'), 5),
-                    collapse = ', ')
-    if (sum(bad) > 5) details = paste0(details, ', ...')
-    stop('Unsafe forcing/meteoCov ID(s): ', details,
-         '. IDs must be plain file names inside the forcing directory.',
-         call. = FALSE)
-  }
-  id
-}
 if( xfg$iforcing < 1 ){
   if( xfg$iforcing < 0 ){
     sp.forc = sf::st_read(pd.pcs$wbd.buf, quiet = TRUE)
@@ -194,14 +138,18 @@ if( xfg$iforcing < 1 ){
   sp.c$ID = ID
   sp.c = sp.c["ID"]
   sp.c = as(sp.c, 'Spatial')
-  sp.forc = sf::st_as_sf(ForcingCoverage(sp.meteoSite = sp.c,
-                                         pcs = pcs.forc, gcs = gcs.forc,
-                                         dem = dem.forc, wbd = wbd.forc))
+  sp.forc = sf::st_as_sf(autoshud_step3_forcing_coverage(
+    sp.meteoSite = sp.c, pcs = pcs.forc, gcs = gcs.forc,
+    dem = dem.forc, wbd = wbd.forc))
 }else{
   sp.forc = sf::st_read(xfg$fsp.forc, quiet = TRUE)
-  sp.forc = sf::st_as_sf(rSHUD::ForcingCoverage(sp.meteoSite = as(sp.forc, 'Spatial'),
-                                                pcs = pcs.forc, gcs = gcs.forc,
-                                                dem = dem.forc, wbd = wbd.forc))
+  sp.forc = autoshud_step3_assign_site_ids(sp.forc, forcing.dir = xfg$dir$forc)
+  sp.forc = sf::st_as_sf(autoshud_step3_forcing_coverage(
+    sp.meteoSite = as(sp.forc, 'Spatial'), pcs = pcs.forc, gcs = gcs.forc,
+    dem = dem.forc, wbd = wbd.forc))
+  autoshud_step3_enforce_local_forcing_window(sp.forc, xfg = xfg,
+                                              years = years,
+                                              forcing.dir = xfg$dir$forc)
 }
 
 write_forc(sf::st_drop_geometry(sp.forc), path = xfg$dir$forc,

@@ -348,13 +348,19 @@ if (requireNamespace("sf", quietly = TRUE) && requireNamespace("rSHUD", quietly 
       "Landuse 1.1",
       paste("fn.landuse", file.path(tmp, "landuse.tif")),
       "QuickMode 1",
-      "DistBuffer 1000"
+      "DistBuffer 1000",
+      "local.forcing.max.bytes 12345",
+      "local.forcing.max.rows 678",
+      "local.forcing.max.cols 9"
     ), prj)
     xfg <- read.prj(prj)
     expect_equal(xfg$iforcing, 0.7)
     expect_equal(xfg$dir.era5, "/tmp/ldas")
     expect_equal(xfg$era5$lon.mode, "auto")
     expect_equal(xfg$era5$buffer.deg, 0)
+    expect_equal(xfg$para$local.forcing.max.bytes, 12345)
+    expect_equal(xfg$para$local.forcing.max.rows, 678)
+    expect_equal(xfg$para$local.forcing.max.cols, 9)
   })
 } else {
   skip("ReadProject parses ERA5 defaults", "requires sf and rSHUD")
@@ -1034,6 +1040,49 @@ test_that("ERA5 missing file error reports year or pattern", {
   msg <- expect_error(era5_discover_files(tmp, 2099), "2099")
   expect_true(grepl("2099", msg))
 })
+
+if (all(have[c("ncdf4", "sf", "xts")])) {
+  test_that("ERA5 missing requested year fails before final forcing outputs", {
+    tmp <- tempfile("era5-missing-year-")
+    dir.create(tmp)
+    ctx <- make_era5_context(tmp)
+    ctx$xfg$years <- 2099
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"),
+            c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2)))
+    expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs), "2099")
+    expect_true(!dir.exists(ctx$forc.dir) ||
+                  length(list.files(ctx$forc.dir, pattern = "\\.csv$")) == 0)
+    expect_true(!file.exists(ctx$pd.gcs$meteoCov),
+                "GCS meteoCov must not be published on missing-year failure")
+    expect_true(!file.exists(ctx$pd.pcs$meteoCov),
+                "PCS meteoCov must not be published on missing-year failure")
+  })
+
+  test_that("ERA5 no-grid-hit fails before final forcing outputs", {
+    tmp <- tempfile("era5-no-grid-hit-")
+    dir.create(tmp)
+    ctx <- make_era5_context(
+      tmp,
+      bbox = c(xmin = -10, xmax = -9, ymin = -10, ymax = -9),
+      era5 = list(buffer.deg = 0, lon.mode = "auto", file.pattern = NULL)
+    )
+    make_nc(file.path(ctx$era5.dir, "ERA5_20010101.nc"),
+            c(255.00), c(40.00), 0:1,
+            var.values = make_var_values(c(1, 1, 2)))
+    expect_error(era5_nc2csv(ctx$xfg, ctx$pd.gcs, ctx$pd.pcs),
+                 "no ERA5 grid points selected")
+    expect_true(!dir.exists(ctx$forc.dir) ||
+                  length(list.files(ctx$forc.dir, pattern = "\\.csv$")) == 0)
+    expect_true(!file.exists(ctx$pd.gcs$meteoCov),
+                "GCS meteoCov must not be published on no-grid-hit failure")
+    expect_true(!file.exists(ctx$pd.pcs$meteoCov),
+                "PCS meteoCov must not be published on no-grid-hit failure")
+  })
+} else {
+  skip("ERA5 no-grid-hit fails before final forcing outputs",
+       paste("requires", paste(names(have)[!have], collapse = ", ")))
+}
 
 message("Completed ", length(tests), " ERA5 tests; skipped ", length(skips), ".")
 if (length(skips)) {

@@ -13,6 +13,7 @@
 
 rm(list=ls())
 source('GetReady.R')
+source('Rfunction/Step1_StreamHardening.R')
 prefix ='S1'
 # ================= Boundary =================
 wbd0 = sf::st_read(xfg$fsp.wbd, quiet = TRUE)  # Read data
@@ -57,7 +58,9 @@ fun.gdalwarp(f1=xfg$fr.dem, f2=pd.gcs$dem, t_srs = xfg$crs.gcs, s_srs = terra::c
 
 # =========Stream Network===========================
 stm0 = sf::st_read(xfg$fsp.stm, quiet = TRUE)  # data 0: raw data
-stm1 = sf::st_transform(stm0, xfg$crs.pcs)  # data 1: PCS
+stm1 = autoshud_step1_prepare_stream(stm0, target.crs = xfg$crs.pcs,
+                                     source.crs = wbd0,
+                                     label = xfg$fsp.stm)  # data 1: PCS
 fun.simplifyRiver <- function(rmDUP=TRUE){
   riv.xy = sf::st_coordinates(stm1)
   npoint = nrow(riv.xy)
@@ -82,6 +85,7 @@ if(xfg$para$flowpath){
 }else{
   stm.p = stm1
 }
+stm.p = autoshud_step1_clean_stream_geometry(stm.p, label = pd.pcs$stm)
 
 sf::st_write(stm.p, dsn = pd.pcs$stm, driver = "ESRI Shapefile", delete_dsn = TRUE, quiet = TRUE)
 

@@ -120,3 +120,60 @@ classic Step3 forcing metadata path without external ERA5 preprocessing.
 The harness also verifies NetCDF discovery symlink rejection, discovery
 `era5.max.files`, finite-value validation, and transactional publication
 rollback for CSV plus `meteoCov` outputs.
+
+## Step1 and Step3 Runtime Hardening
+
+Step1 validates stream geometry after CRS handling and before writing
+`DataPre/pcs/stm.shp`. Empty, invalid, non-line, and zero-length stream
+features are removed from the generated predata stream with a warning that
+reports removal counts. The source GIS file configured by `fsp.stm` is not
+edited. If no valid stream feature remains, Step1 stops before publishing a
+misleading stream shapefile.
+
+If the stream shapefile has no CRS, Step1 uses the watershed/source CRS only
+when that CRS is available. It stops instead of guessing when both stream and
+watershed/source CRS metadata are missing.
+
+Step3 passes `sf::st_crs()` CRS objects to `ForcingCoverage()` first, which is
+the current rSHUD-compatible path, and falls back to legacy CRS forms only when
+the installed rSHUD still requires them. Existing `meteoCov`/station `ID`
+values continue to define forcing CSV basenames. Blank or missing local station
+IDs use the generated `X<coord>Y<coord>` fallback basename before coverage is
+computed. Unsafe IDs containing path separators, `..`, absolute/path-like forms,
+or control characters are rejected before `.tsd.forc` is written.
+
+## Local Station Forcing Windows
+
+For `Forcing >= 1`, Step3 enforces the configured
+`startyear/endyear/STARTDAY/ENDDAY` window on local station forcing CSV files in
+`dout.forc` before writing model forcing metadata. Step3 supports the classic
+SHUD single-block TSD CSV format written by `write.tsd()`/`write_tsd()`.
+Unparseable files, irregular time intervals, unsupported multi-block files,
+missing CSVs, or CSVs that do not cover the configured window stop the run
+before `.tsd.forc` is published.
+
+The cropping operation is scoped to the output copies under `dout.forc`. Keep
+benchmark/source forcing files outside that directory and copy them into the run
+forcing output directory before Step3 when they need to be reused unchanged.
+Step3 rejects symlinked output CSV paths and verifies that resolved local
+forcing CSV paths stay inside `dout.forc` before parsing or publishing. It also
+publishes cropped CSVs transactionally with same-directory temporary files and
+rolls back already-replaced files if a later file fails.
+
+For a one-year run, a multi-year output copy is reduced to the requested year.
+Sub-year windows are honored with zero-based day indexes while preserving the
+project-origin model time contract. For example, `startyear 2001`, `endyear
+2001`, `STARTDAY 31`, and `ENDDAY 59` keeps 2001-02-01 through 2001-03-01, and
+the first retained `Time_interval` remains `31` with a `20010101` header start
+date.
+
+Local station forcing CSV resource guards can be configured under `xfg$para`:
+`local.forcing.max.bytes`, `local.forcing.max.rows`, and
+`local.forcing.max.cols`. Defaults are 268435456 bytes, 1000000 rows, and 256
+columns per CSV, which are intended to allow normal multi-year daily station
+forcing while rejecting unexpectedly large local files before publication.
+
+ERA5 runs are unaffected by the local station cropping step: `Forcing 0.7`
+continues to publish year-selected CSVs and `meteoCov` shapefiles from Step2,
+including year-specific directory and `era5.file.pattern` discovery behavior,
+missing-year errors, and no-grid-point selection errors.

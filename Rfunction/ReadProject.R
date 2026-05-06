@@ -96,6 +96,9 @@ read.prj <- function(fn.prj){
   CRYOSPHERE = getVAL(xcfg, 'CRYOSPHERE', TRUE, 0)
   STARTDAY = getVAL(xcfg, 'STARTDAY', TRUE, 0)
   ENDDAY = getVAL(xcfg, 'ENDDAY', TRUE, rSHUD::days_in_year(years))
+  local.forcing.max.bytes = getVAL(xcfg, 'local.forcing.max.bytes', TRUE)
+  local.forcing.max.rows = getVAL(xcfg, 'local.forcing.max.rows', TRUE)
+  local.forcing.max.cols = getVAL(xcfg, 'local.forcing.max.cols', TRUE)
   
   if(!file.exists(fsp.wbd)){
     message('Error [critical]: fsp.wbds file is missing.')
@@ -222,6 +225,9 @@ read.prj <- function(fn.prj){
                'CRYOSPHERE'=CRYOSPHERE,
                'STARTDAY'=STARTDAY,
                'ENDDAY'=ENDDAY,
+               'local.forcing.max.bytes'=local.forcing.max.bytes,
+               'local.forcing.max.rows'=local.forcing.max.rows,
+               'local.forcing.max.cols'=local.forcing.max.cols,
                'PFACT'=pfact
              )
   )
