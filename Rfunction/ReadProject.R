@@ -1,5 +1,24 @@
 
 
+autoshud_crs_albers_compat <- function(fsp.wbd, crs_fun = rSHUD::crs.Albers){
+  wbd.sf = sf::st_read(fsp.wbd, quiet = TRUE)
+  crs.albers = tryCatch(
+    crs_fun(wbd.sf),
+    error = function(sf.error){
+      tryCatch(
+        crs_fun(as(wbd.sf, 'Spatial')),
+        error = function(sp.error){
+          stop('rSHUD::crs.Albers failed for sf and legacy Spatial watershed inputs. ',
+               'sf error: ', conditionMessage(sf.error), '; ',
+               'Spatial error: ', conditionMessage(sp.error),
+               call. = FALSE)
+        }
+      )
+    }
+  )
+  sf::st_crs(crs.albers)$wkt
+}
+
 read.prj <- function(fn.prj){
   PATH2FD ='/Users/leleshu/volume/data/ForcingData'
   getVAL <- function(x, valname, real=FALSE, defVal = NULL){
@@ -112,12 +131,12 @@ read.prj <- function(fn.prj){
       crs.pcs <- sf::st_crs(sf::st_read(crs.fn, quiet = TRUE))$wkt
     }else{
       message('CRS file is missing. So Albers projection is used')
-      crs.pcs <- sf::st_crs(rSHUD::crs.Albers(as(sf::st_read(fsp.wbd, quiet = TRUE), 'Spatial')))$wkt
+      crs.pcs <- autoshud_crs_albers_compat(fsp.wbd)
       message(crs.pcs)
     }
   }else{
     message('CRS file is missing. So Albers projection is used')
-    crs.pcs <- sf::st_crs(rSHUD::crs.Albers(as(sf::st_read(fsp.wbd, quiet = TRUE), 'Spatial')))$wkt
+    crs.pcs <- autoshud_crs_albers_compat(fsp.wbd)
     message(crs.pcs)
   }
   
