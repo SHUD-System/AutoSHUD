@@ -1,0 +1,6 @@
+<PAMDataset>
+  <PAMRasterBand band="1">
+    <Description>hwsd</Description>
+    <NoDataValue>6.55350000000000E+04</NoDataValue>
+  </PAMRasterBand>
+</PAMDataset>

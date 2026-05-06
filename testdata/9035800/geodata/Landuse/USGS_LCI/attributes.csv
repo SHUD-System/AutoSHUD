@@ -1,0 +1,19 @@
+17	8
+INDEX	ALBEDO	VEGFRAC	ROUGH	RZD	SOILDGRD	IMPAF	remark
+ 0	0.080	0.000	0.020	0.00	0.0	0.0	Water
+ 1	0.140	0.800	0.070	0.60	0.0	0.0	Evergreen Needle leaf Forest
+ 2	0.100	0.900	0.070	0.60	0.0	0.0	Evergreen Broadleaf Forest
+ 3	0.140	0.800	0.070	0.60	0.0	0.0	Deciduous Needle leaf Forest
+ 4	0.120	0.800	0.070	0.60	0.0	0.0	Deciduous Broadleaf Forest
+ 5	0.110	0.700	0.060	0.60	0.0	0.0	Mixed Forests
+ 6	0.120	0.700	0.060	0.00	0.0	0.0	Closed Shrublands
+ 7	0.180	0.500	0.050	0.40	0.0	0.0	Open Shrublands
+ 8	0.100	0.625	0.045	0.40	0.0	0.0	Woody Savannas
+ 9	0.150	0.218	0.045	0.40	0.0	0.0	Savannas
+10	0.150	0.726	0.040	0.40	0.0	0.0	Grasslands
+11	0.100	0.200	0.035	0.00	0.0	0.0	Permanent Wetland
+12	0.250	0.835	0.040	0.40	0.5	0.0	Croplands
+13	0.246	0.200	0.010	0.05	0.9	0.9	Urban and Built-Up
+14	0.200	0.835	0.040	0.40	0.5	0.0	Cropland/Natural Vegetation Mosaic
+15	0.650	0.000	0.020	0.00	0.0	0.5	Snow and Ice
+16	0.300	0.010	0.035	0.05	0.6	0.0	Barren or Sparsely Vegetated
