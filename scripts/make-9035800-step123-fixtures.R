@@ -18,6 +18,8 @@ if (length(missing)) {
        call. = FALSE)
 }
 
+source(file.path(repo, "Rfunction/ReadProject.R"))
+
 source_soil_dir <- normalizePath("../testdata/geodata/Soil/HWSD_RASTER",
                                  mustWork = TRUE)
 source_landuse <- normalizePath("../testdata/geodata/Landuse/USGS_LCI/LCType.tif",
@@ -34,8 +36,9 @@ soil_out <- file.path(out_soil_dir, "hwsd.bil")
 landuse_out <- file.path(out_landuse_dir, "LCType.tif")
 dbf_out <- file.path(out_soil_dir, "hwsd.dbf")
 
-wbd <- sf::st_read(file.path(repo, "Example/9035800/wbd.shp"), quiet = TRUE)
-pcs <- sf::st_crs(rSHUD::crs.Albers(as(wbd, "Spatial")))$wkt
+wbd_file <- file.path(repo, "Example/9035800/wbd.shp")
+wbd <- sf::st_read(wbd_file, quiet = TRUE)
+pcs <- autoshud_crs_albers_compat(wbd_file)
 buffer_gcs <- sf::st_transform(
   sf::st_buffer(sf::st_transform(wbd, pcs), dist = 1500),
   4326
