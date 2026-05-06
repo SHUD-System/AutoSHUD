@@ -65,11 +65,31 @@ hash_tree <- function(path) {
                   sub(paste0("^", normalizePath(path, winslash = "/"), "/?"),
                       "", normalizePath(sort(files), winslash = "/")))
 }
+snapshot_repo_rplots <- function() {
+  artifact <- file.path(repo, "Rplots.pdf")
+  exists <- file.exists(artifact)
+  list(path = artifact,
+       exists = exists,
+       hash = if (exists) hash_file(artifact) else NA_character_)
+}
+expect_repo_rplots_unchanged <- function(snapshot, label) {
+  exists <- file.exists(snapshot$path)
+  expect_true(identical(exists, snapshot$exists),
+              label, ": repository-root Rplots.pdf existence changed: ",
+              snapshot$path)
+  if (snapshot$exists) {
+    expect_true(identical(hash_file(snapshot$path), snapshot$hash),
+                label, ": repository-root Rplots.pdf content changed: ",
+                snapshot$path)
+  }
+}
 path_inside <- function(path, root) {
   path <- normalizePath(path, winslash = "/", mustWork = FALSE)
   root <- normalizePath(root, winslash = "/", mustWork = FALSE)
   path == root | startsWith(path, paste0(root, "/"))
 }
+
+repo_rplots_before <- snapshot_repo_rplots()
 
 check_rivseg_compatibility_helpers <- function() {
   lines <- readLines("GetReady.R", warn = FALSE)
@@ -137,7 +157,80 @@ check_rivseg_compatibility_helpers <- function() {
               "Modern positional rivseg call must return sf output.")
 }
 
+source("Rfunction/ReadProject.R")
+
+check_crs_albers_compatibility_helper <- function() {
+  wbd_file <- file.path(repo, "Example/9035800/wbd.shp")
+  expected_wkt <- sf::st_crs(5070)$wkt
+
+  sf_calls <- 0L
+  sf_wkt <- autoshud_crs_albers_compat(
+    wbd_file,
+    crs_fun = function(wbd) {
+      sf_calls <<- sf_calls + 1L
+      expect_true(inherits(wbd, "sf"),
+                  "sf-compatible CRS path must receive an sf watershed.")
+      sf::st_crs(5070)
+    }
+  )
+  expect_true(identical(sf_calls, 1L),
+              "sf-compatible CRS path should not call the legacy fallback.")
+  expect_true(identical(sf_wkt, expected_wkt),
+              "sf-compatible CRS path returned unexpected WKT.")
+
+  legacy_calls <- character()
+  legacy_wkt <- autoshud_crs_albers_compat(
+    wbd_file,
+    crs_fun = function(wbd) {
+      legacy_calls <<- c(legacy_calls, if (inherits(wbd, "sf")) {
+        "sf"
+      } else if (inherits(wbd, "Spatial")) {
+        "Spatial"
+      } else {
+        paste(class(wbd), collapse = "/")
+      })
+      if (inherits(wbd, "sf")) {
+        stop("sf input rejected")
+      }
+      expect_true(inherits(wbd, "Spatial"),
+                  "legacy CRS fallback must receive a Spatial watershed.")
+      sf::st_crs(5070)
+    }
+  )
+  expect_true(identical(legacy_calls, c("sf", "Spatial")),
+              "legacy CRS path must try sf first and Spatial second.")
+  expect_true(identical(legacy_wkt, expected_wkt),
+              "legacy CRS fallback returned unexpected WKT.")
+}
+
+check_explicit_crs_file_preserved <- function() {
+  explicit_root <- normalizePath(tempfile("autoshud-explicit-crs-"),
+                                 winslash = "/", mustWork = FALSE)
+  dir.create(explicit_root, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(explicit_root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  explicit_out <- file.path(explicit_root, "run")
+  explicit_forcing <- file.path(explicit_out, "forcing")
+  template <- readLines("testdata/9035800/9035800.acceptance.autoshud.txt",
+                        warn = FALSE)
+  config <- gsub("__AUTOSHUD_ACCEPTANCE_DIR_OUT__", explicit_out, template,
+                 fixed = TRUE)
+  config <- gsub("__AUTOSHUD_ACCEPTANCE_DOUT_FORC__", explicit_forcing, config,
+                 fixed = TRUE)
+  crs_file <- "./Example/9035800/wbd.shp"
+  config <- c(config, paste("fsp.crs", crs_file))
+  config_file <- file.path(explicit_root, "explicit-crs.autoshud.txt")
+  writeLines(config, config_file, useBytes = TRUE)
+
+  cfg <- read.prj(config_file)
+  expected_wkt <- sf::st_crs(sf::st_read(crs_file, quiet = TRUE))$wkt
+  expect_true(identical(cfg$crs.pcs, expected_wkt),
+              "Existing explicit fsp.crs file must remain authoritative.")
+}
+
 check_rivseg_compatibility_helpers()
+check_crs_albers_compatibility_helper()
+check_explicit_crs_file_preserved()
 
 fixture_rasters <- c(
   soil = "testdata/9035800/geodata/Soil/HWSD_RASTER/hwsd.bil",
@@ -211,14 +304,27 @@ for (id in expected_ids) {
 
 run_step <- function(script) {
   message("RUN: Rscript ", script, " ", config_file)
-  artifact <- file.path(repo, "Rplots.pdf")
-  unlink(artifact, force = TRUE)
-  status <- system2("Rscript", c(script, config_file))
-  unlink(artifact, force = TRUE)
+  step_dir <- file.path(run_root, paste0("work-",
+                                         tools::file_path_sans_ext(basename(script))))
+  dir.create(step_dir, recursive = TRUE, showWarnings = FALSE)
+  for (name in c("GetReady.R", "Rfunction", "SubScript", "Table",
+                 "Example", "testdata")) {
+    link <- file.path(step_dir, name)
+    if (!file.exists(link)) {
+      expect_true(file.symlink(file.path(repo, name), link),
+                  "Failed to create harness-owned step workspace link: ", link)
+    }
+  }
+
+  old_wd <- setwd(step_dir)
+  on.exit(setwd(old_wd), add = TRUE)
+  status <- system2("Rscript", c(file.path(repo, script), config_file))
+  expect_repo_rplots_unchanged(repo_rplots_before, paste("after", script))
+  step_artifact <- file.path(step_dir, "Rplots.pdf")
+  if (file.exists(step_artifact)) {
+    unlink(step_artifact, force = TRUE)
+  }
   expect_true(identical(status, 0L), script, " failed with exit status ", status)
-  expect_true(!file.exists(artifact),
-              "Step script left a generated plot artifact in the repository root: ",
-              artifact)
 }
 
 run_step("Step1_RawDataProcessng.R")
@@ -312,5 +418,6 @@ expect_true(identical(example_hash_before, hash_tree(file.path(repo, "Example/90
 expect_true(!any(path_inside(list.files(dir_out, recursive = TRUE, full.names = TRUE),
                              file.path(repo, "Example/9035800"))),
             "Generated outputs were written into Example/9035800.")
+expect_repo_rplots_unchanged(repo_rplots_before, "at end")
 
 message("PASS: 9035800 Step1-3 acceptance")

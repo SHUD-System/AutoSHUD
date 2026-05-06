@@ -25,6 +25,7 @@ Issue #13 turns the existing 9035800 example into a repository-contained Step1-3
 - Store fixture data under a repository-owned test/example fixture path with relative config paths. Rationale: users and CI can run the acceptance without a parent `testdata` checkout.
 - Build the soil/landuse fixtures by clipping from available source rasters to the 9035800 buffered extent. Rationale: the clipped files are small enough for the repository and exercise real raster processing.
 - Stage local station forcing by copying from `Example/9035800/forcing` into the temporary `dout.forc`. Rationale: Step3 intentionally operates on output copies and must not mutate source forcing files.
+- Include focused compatibility shims only where the acceptance exposes existing rSHUD 2.0 vs 2.4/2.5 API drift. Rationale: the Step3 acceptance cannot complete across supported local package states unless `GetReady.R` resolves snake_case/dotted rSHUD exports, preserves modern `shud.rivseg(sf_mesh, sf_riv)` calls, and `ReadProject.R` can derive fallback Albers CRS from either sf-capable or legacy Spatial-only `crs.Albers()` implementations.
 
 ## Risk Triage
 
@@ -60,6 +61,7 @@ Why:
 - Acceptance command: a single Rscript command runs Step1, Step2, and Step3 with temp output and exits 0.
 - Output checks: generated Step1 predata shapefiles/rasters, Step2 soil/geol/landuse artifacts, Step3 SHUD input files and GIS sidecars exist with basic schema.
 - Source preservation check: `Example/9035800` source GIS/DEM/forcing files are not modified by the acceptance run.
+- Compatibility evidence: focused helper checks cover rSHUD legacy and modern rivseg call shapes, snake_case/dotted writer exports, and Albers CRS fallback for both sf-capable and legacy Spatial-only `crs.Albers()` behavior.
 - Regression commands: existing `Rscript tests/test-era5-forcing.R` and `Rscript tests/test-step-forcing-hardening.R` pass.
 
 ## Review Focus
@@ -76,3 +78,4 @@ Why:
 - Size guard: acceptance or fixture validation must fail if a committed soil/landuse raster has more than 5,000,000 cells, has a global lon/lat extent, or has a file size larger than 50 MB. These limits are intentionally far above the 9035800 fixture need but below global HWSD/USGS source data.
 - Forcing window guard: staged `54904.csv` and `54905.csv` must remain parseable after Step3 local forcing enforcement and cover the configured 2001-2005 date window from the acceptance config. The source CSVs under `Example/9035800/forcing` must remain unchanged.
 - Dependency guard: this change should not edit package dependency metadata or introduce new heavy runtime dependencies. It may use already-required/used spatial packages (`sf`, `terra`, `raster`) in tests/harnesses.
+- Plot/output isolation guard: the harness must not delete, overwrite, or rely on cleanup of repository-root `Rplots.pdf`; any implicit plot artifact produced by unmodified Step scripts must be confined to harness-owned temporary work directories.

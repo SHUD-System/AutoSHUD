@@ -10,6 +10,7 @@ AutoSHUD SHALL provide a 9035800 Step1-3 acceptance command that uses only files
 - **THEN** AutoSHUD runs `Step1_RawDataProcessng.R`, `Step2_DataSubset.R`, and `Step3_BuidModel.R` in order
 - **THEN** the command exits successfully after verifying key Step1, Step2, and Step3 outputs
 - **THEN** generated outputs are written outside tracked source fixture paths
+- **THEN** any implicit plot artifacts produced by unmodified Step scripts are confined to harness-owned temporary work directories and repository-root `Rplots.pdf` is not deleted or modified
 
 #### Scenario: Acceptance does not depend on private or parent-workspace paths
 
@@ -51,3 +52,20 @@ The 9035800 acceptance harness SHALL stage local station forcing CSV files into 
 - **WHEN** the acceptance command completes or fails
 - **THEN** source files under `Example/9035800` are not modified
 - **THEN** no generated Step1-3 outputs are committed under `Example/9035800`
+
+### Requirement: rSHUD compatibility is preserved for the acceptance path
+
+AutoSHUD SHALL keep the 9035800 Step1-3 acceptance path compatible with both legacy rSHUD 2.0-style exports and modern rSHUD 2.4/2.5-style sf-oriented entrypoints without adding new runtime dependencies.
+
+#### Scenario: Fallback Albers CRS works across rSHUD CRS APIs
+
+- **WHEN** the acceptance project has no existing `fsp.crs` file
+- **THEN** AutoSHUD derives an Albers CRS using an sf watershed when supported by `rSHUD::crs.Albers()`
+- **THEN** AutoSHUD falls back to legacy Spatial watershed input when the installed rSHUD requires it
+- **THEN** an existing explicit `fsp.crs` file remains authoritative when configured
+
+#### Scenario: Step3 rSHUD helpers support legacy and modern function names
+
+- **WHEN** Step3 writes SHUD inputs and builds river segments during the acceptance run
+- **THEN** AutoSHUD resolves rSHUD writer helpers across snake_case and dotted export names
+- **THEN** AutoSHUD preserves sf inputs for modern `shud.rivseg` signatures and uses legacy `sp.RiverSeg` fallback only when required

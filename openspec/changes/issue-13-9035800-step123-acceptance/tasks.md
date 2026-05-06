@@ -10,6 +10,7 @@
 - [x] 2.2 Add an Rscript acceptance harness that creates a temporary run directory, writes or patches the config `dir.out` and `dout.forc`, stages `Example/9035800/forcing/54904.csv` and `54905.csv` into the temporary forcing output directory, and runs Step1, Step2, and Step3 in order.
 - [x] 2.3 Ensure the harness uses ordinary AutoSHUD step scripts instead of duplicating Step1-3 logic, except for temporary config creation, forcing staging, and output assertions.
 - [x] 2.4 Ensure the harness fails clearly if any source fixture input is missing, if forcing IDs do not match CSV basenames, or if outputs would be written outside the temporary run directory.
+- [x] 2.5 Ensure the harness runs Step scripts from harness-owned temporary work directories and proves repository-root `Rplots.pdf` is not deleted or modified.
 
 ## 3. Acceptance Assertions
 
@@ -32,3 +33,9 @@
 - [x] 5.1 Add fixture validation that asserts soil and landuse rasters are under `testdata/9035800/geodata/...`, have non-global extents, have no more than 5,000,000 cells, and each raster file is under 50 MB.
 - [x] 5.2 Add forcing-window assertions for staged `54904.csv` and `54905.csv`: after Step3, output copies remain parseable and cover the configured 2001-2005 acceptance window, while source CSVs remain unchanged.
 - [x] 5.3 Inspect dependency metadata and git diff to confirm no new heavy runtime dependency or dependency metadata churn was introduced.
+
+## 6. rSHUD Compatibility Evidence
+
+- [x] 6.1 Add focused checks that `GetReady.R` preserves legacy `sp.RiverSeg` fallback and modern sf-preserving `shud.rivseg` call shapes.
+- [x] 6.2 Add focused checks that `ReadProject.R` fallback Albers CRS derivation supports both sf-capable and legacy Spatial-only `rSHUD::crs.Albers()` behavior.
+- [x] 6.3 Verify existing explicit `fsp.crs` files remain authoritative and are not replaced by fallback CRS derivation.
