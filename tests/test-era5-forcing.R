@@ -13,6 +13,7 @@ repo <- if (!is.na(script_file)) {
 setwd(repo)
 
 source("Rfunction/ERA5_NC2CSV.R")
+source("Rfunction/Step3_ForcingHardening.R")
 
 tests <- list()
 skips <- character()
@@ -275,12 +276,12 @@ run_classic_step3_metadata <- function(xfg, pd.pcs, forc.file) {
                         crs = sp::CRS("+init=epsg:4326"))
   raster::values(dem) <- 100
   wbd <- sf::st_read(pd.pcs$wbd, quiet = TRUE)
-  cov <- sf::st_as_sf(rSHUD::ForcingCoverage(sp.meteoSite = as(sp.c, "Spatial"),
-                                             pcs = sp::CRS("+init=epsg:4326"),
-                                             gcs = sp::CRS("+init=epsg:4326"),
-                                             dem = dem,
-                                             wbd = as(wbd, "Spatial"),
-                                             enlarge = 1))
+  cov <- sf::st_as_sf(autoshud_step3_forcing_coverage(sp.meteoSite = as(sp.c, "Spatial"),
+                                                       pcs = xfg$crs.pcs,
+                                                       gcs = xfg$crs.gcs,
+                                                       dem = dem,
+                                                       wbd = as(wbd, "Spatial"),
+                                                       enlarge = 1))
   rSHUD::write.forc(sf::st_drop_geometry(cov), path = xfg$dir$forc,
                     startdate = "20010101", file = forc.file)
   forc.file
@@ -989,12 +990,12 @@ if (all(have[c("ncdf4", "sf", "xts", "rSHUD", "raster", "sp")])) {
                           crs = sp::CRS("+init=epsg:4326"))
     raster::values(dem) <- 100
     wbd <- sf::st_read(pd.pcs$wbd, quiet = TRUE)
-    cov <- sf::st_as_sf(rSHUD::ForcingCoverage(sp.meteoSite = as(sp.c, "Spatial"),
-                                               pcs = sp::CRS("+init=epsg:4326"),
-                                               gcs = sp::CRS("+init=epsg:4326"),
-                                               dem = dem,
-                                               wbd = as(wbd, "Spatial"),
-                                               enlarge = 1))
+    cov <- sf::st_as_sf(autoshud_step3_forcing_coverage(sp.meteoSite = as(sp.c, "Spatial"),
+                                                         pcs = xfg$crs.pcs,
+                                                         gcs = xfg$crs.gcs,
+                                                         dem = dem,
+                                                         wbd = as(wbd, "Spatial"),
+                                                         enlarge = 1))
     forc.file <- file.path(tmp, "model.forc")
     rSHUD::write.forc(sf::st_drop_geometry(cov), path = forc.dir,
                       startdate = "20010101", file = forc.file)
