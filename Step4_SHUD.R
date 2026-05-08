@@ -1,42 +1,21 @@
-# Task:
-# 1. Download SHUD++ from GitHub.
-# 2. Compile SHUD++ locally. SHUD++ requires Sundials v3.1;  OpenMP and MPI is recommended if using parallel SHUD.
-# 3. Run SHUD. And export the screen output of SHUD.
-# 4.
-# 5.
-# 6.
-# 7.
-# 8.
-rm(list=ls())
-source('GetReady.R')
-cdir=getwd()
-CMD.EXE='shud'
-# download SHUD from github.
-# destfile=file.path(dir.out, 'SHUD_github.zip')
-# download.file(url='https://github.com/SHUD-System/SHUD/archive/master.zip',
-#               destfile = destfile)
-system('git clone git@github.com:SHUD-System/SHUD.git shud_src')
-# unzip and compile SHUD.
-# unzip(zipfile = destfile, exdir = dir.out)
-# setwd(file.path(dir.out, 'SHUD-4.0-master'))
-setwd('shud_src')
-cmd='make clean & make shud'
-message('Compile SHUD: ')
-message('\t', cmd)
-system(cmd, wait = T, intern = FALSE)
-file.rename(from=CMD.EXE, to =file.path('..', CMD.EXE))
+#!/usr/bin/env Rscript
 
-# Run SHUD
-setwd('../')
-fn1 = 'shud'
-fn2 = file.path('.', prjname, 'shud')
-file.copy(from = fn1, to = fn2, overwrite = TRUE)
-setwd(prjname)
-cmd = paste( paste('./shud', prjname) )
+rm(list = ls())
+source("GetReady.R")
+source("Rfunction/Step4_SHUDRunner.R")
 
-message('Run SHUD: ')
-message('\t', cmd)
-sout <-system(cmd, wait = T,intern=TRUE, ignore.stdout = FALSE,
-              ignore.stderr = FALSE)
-write(sout, file.path(dir.SHUDout, paste0(prjname, '.log') ) )
-setwd(cdir)
+result <- autoshud_step4_run_case(
+  prjname = xfg$prjname,
+  model_input_dir = xfg$dir$modelin,
+  run_dir = xfg$dir$out,
+  xfg = xfg,
+  stage_inputs = TRUE,
+  build_timeout = as.numeric(Sys.getenv("AUTOSHUD_SHUD_BUILD_TIMEOUT", "600")),
+  run_timeout = as.numeric(Sys.getenv("AUTOSHUD_SHUD_RUN_TIMEOUT", "1800")),
+  threads = as.integer(Sys.getenv("AUTOSHUD_SHUD_THREADS", "1"))
+)
+
+message("Step4 SHUD build/run completed.")
+message("Run directory: ", result$run_dir)
+message("Output directory: ", result$output_dir)
+message("Log directory: ", result$logs_dir)
