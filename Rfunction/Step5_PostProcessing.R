@@ -20,9 +20,113 @@ if (!exists("%||%", mode = "function")) {
   }
 }
 
+autoshud_step5_validate_prjname <- function(prjname) {
+  if (!is.character(prjname) || length(prjname) != 1L ||
+      is.na(prjname) || !nzchar(prjname) ||
+      grepl("[[:cntrl:]/\\\\]", prjname) ||
+      grepl("^~", prjname) ||
+      grepl("^[A-Za-z]:", prjname) ||
+      prjname %in% c(".", "..") ||
+      !grepl("^[A-Za-z0-9][A-Za-z0-9._-]*$", prjname)) {
+    stop("Unsafe Step5 project name: use a safe basename containing only ",
+         "letters, digits, '.', '_' or '-'.", call. = FALSE)
+  }
+  prjname
+}
+
+autoshud_step5_normalize_path <- function(path, base = getwd()) {
+  path <- path.expand(as.character(path))
+  is_absolute <- grepl("^/", path) || grepl("^[A-Za-z]:[/\\\\]", path)
+  if (!is_absolute) {
+    path <- file.path(base, path)
+  }
+  path <- gsub("\\\\", "/", path)
+  prefix <- ""
+  rest <- path
+  if (grepl("^[A-Za-z]:/", path)) {
+    prefix <- substr(path, 1L, 3L)
+    rest <- sub("^[A-Za-z]:/+", "", path)
+  } else if (startsWith(path, "/")) {
+    prefix <- "/"
+    rest <- sub("^/+", "", path)
+  }
+  parts <- unlist(strsplit(rest, "/+", perl = TRUE), use.names = FALSE)
+  stack <- character()
+  for (part in parts) {
+    if (!nzchar(part) || identical(part, ".")) {
+      next
+    }
+    if (identical(part, "..")) {
+      if (length(stack)) {
+        stack <- stack[-length(stack)]
+      }
+      next
+    }
+    stack <- c(stack, part)
+  }
+  if (identical(prefix, "/")) {
+    if (length(stack)) paste0("/", paste(stack, collapse = "/")) else "/"
+  } else {
+    paste0(prefix, paste(stack, collapse = "/"))
+  }
+}
+
+autoshud_step5_path_inside <- function(path, root) {
+  path <- autoshud_step5_normalize_path(path)
+  root <- autoshud_step5_normalize_path(root)
+  identical(path, root) || startsWith(path, paste0(root, "/"))
+}
+
+autoshud_step5_validate_plot_filename <- function(filename) {
+  if (!is.character(filename) || length(filename) != 1L ||
+      is.na(filename) || !nzchar(filename) ||
+      filename %in% c(".", "..") ||
+      grepl("[[:cntrl:]/\\\\]", filename) ||
+      grepl("^~", filename) ||
+      grepl("^[A-Za-z]:", filename)) {
+    stop("Step5 plot filename must be a simple relative filename under ",
+         "analysis_dir.", call. = FALSE)
+  }
+  filename
+}
+
+autoshud_step5_resolve_output_paths <- function(output_dir, analysis_dir,
+                                                summary_file,
+                                                plot_filename = "WaterBalance.png",
+                                                output_root = output_dir) {
+  output_root <- autoshud_step5_normalize_path(output_root)
+  output_dir <- autoshud_step5_normalize_path(output_dir)
+  analysis_dir <- autoshud_step5_normalize_path(analysis_dir)
+  summary_file <- autoshud_step5_normalize_path(summary_file)
+  plot_filename <- autoshud_step5_validate_plot_filename(plot_filename)
+  figure_file <- autoshud_step5_normalize_path(file.path(analysis_dir, plot_filename))
+  if (!autoshud_step5_path_inside(output_dir, output_root)) {
+    stop("Step5 output_dir must stay under the configured output root. ",
+         "output_dir: ", output_dir, "; output_root: ", output_root,
+         call. = FALSE)
+  }
+  if (!autoshud_step5_path_inside(analysis_dir, output_root)) {
+    stop("Step5 analysis_dir must stay under the configured output root. ",
+         "analysis_dir: ", analysis_dir, "; output_root: ", output_root,
+         call. = FALSE)
+  }
+  if (!autoshud_step5_path_inside(summary_file, analysis_dir)) {
+    stop("Step5 summary_file must stay under analysis_dir. summary_file: ",
+         summary_file, "; analysis_dir: ", analysis_dir, call. = FALSE)
+  }
+  if (!autoshud_step5_path_inside(figure_file, analysis_dir)) {
+    stop("Step5 figure path must stay under analysis_dir. figure: ",
+         figure_file, "; analysis_dir: ", analysis_dir, call. = FALSE)
+  }
+  list(output_root = output_root, output_dir = output_dir,
+       analysis_dir = analysis_dir, summary_file = summary_file,
+       plot_filename = plot_filename, figure_file = figure_file)
+}
+
 autoshud_step5_read_required_outputs <- function(prjname, output_dir,
                                                  variables = AUTOSHUD_STEP5_REQUIRED_VARIABLES,
                                                  readout_fun = rSHUD::readout) {
+  prjname <- autoshud_step5_validate_prjname(prjname)
   output_dir <- normalizePath(output_dir, winslash = "/", mustWork = FALSE)
   missing <- character()
   xl <- list()
@@ -242,8 +346,14 @@ autoshud_step5_write_summary <- function(summary, file) {
 
 autoshud_step5_write_water_balance_plot <- function(summary, analysis_dir,
                                                     filename = "WaterBalance.png") {
+  filename <- autoshud_step5_validate_plot_filename(filename)
+  analysis_dir <- autoshud_step5_normalize_path(analysis_dir)
+  file <- autoshud_step5_normalize_path(file.path(analysis_dir, filename))
+  if (!autoshud_step5_path_inside(file, analysis_dir)) {
+    stop("Step5 figure path must stay under analysis_dir. figure: ",
+         file, "; analysis_dir: ", analysis_dir, call. = FALSE)
+  }
   dir.create(analysis_dir, recursive = TRUE, showWarnings = FALSE)
-  file <- file.path(analysis_dir, filename)
   png(filename = file, height = 7, width = 9, res = 150, units = "in")
   on.exit(dev.off(), add = TRUE)
   values <- as.numeric(summary[1, c(
@@ -261,10 +371,22 @@ autoshud_step5_run <- function(prjname, model_input_dir, output_dir,
                                analysis_dir = file.path(output_dir, "SHUDtb"),
                                write_figures = TRUE,
                                summary_file = file.path(analysis_dir,
-                                                        "water_balance_summary.csv")) {
+                                                        "water_balance_summary.csv"),
+                               plot_filename = "WaterBalance.png",
+                               output_root = output_dir) {
+  prjname <- autoshud_step5_validate_prjname(prjname)
+  paths <- autoshud_step5_resolve_output_paths(
+    output_dir = output_dir,
+    analysis_dir = analysis_dir,
+    summary_file = summary_file,
+    plot_filename = plot_filename,
+    output_root = output_root
+  )
+  model_input_dir <- normalizePath(model_input_dir, winslash = "/",
+                                   mustWork = FALSE)
   rSHUD::shud.env(prjname = prjname, inpath = model_input_dir,
-                  outpath = output_dir, anapath = analysis_dir)
-  xl <- autoshud_step5_read_required_outputs(prjname, output_dir)
+                  outpath = paths$output_dir, anapath = paths$analysis_dir)
+  xl <- autoshud_step5_read_required_outputs(prjname, paths$output_dir)
   mesh <- rSHUD::readmesh()
   river <- rSHUD::readriv()
   ic <- rSHUD::readic()
@@ -275,15 +397,17 @@ autoshud_step5_run <- function(prjname, model_input_dir, output_dir,
     xl = xl, mesh = mesh, river = river, ic = ic,
     att = att, geol = geol, cfg.para = cfg.para
   )
-  autoshud_step5_write_summary(summary, summary_file)
+  autoshud_step5_write_summary(summary, paths$summary_file)
   figures <- character()
   if (isTRUE(write_figures)) {
-    figures <- autoshud_step5_write_water_balance_plot(summary, analysis_dir)
+    figures <- autoshud_step5_write_water_balance_plot(
+      summary, paths$analysis_dir, filename = paths$plot_filename
+    )
     if (!all(file.exists(figures)) || any(file.info(figures)$size <= 0)) {
       stop("Step5 figure output is missing or empty.", call. = FALSE)
     }
   }
-  list(summary = summary, summary_file = summary_file, figures = figures,
+  list(summary = summary, summary_file = paths$summary_file, figures = figures,
        validation = autoshud_step5_validate_outputs(
          xl, n_elements = nrow(mesh@mesh), n_rivers = nrow(river@river)
        ))

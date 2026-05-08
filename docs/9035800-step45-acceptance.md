@@ -11,14 +11,23 @@ The harness generates temporary 9035800 Step1-3 model inputs, verifies the
 required Step3 files, then runs real SHUD Step4 and Step5 smoke checks. Step4
 requires an existing local SHUD source checkout. Resolution order is explicit
 argument, `options("autoshud.shud_source")`, `AUTOSHUD_SHUD_SOURCE`,
-`AUTOSHUD_SHUD_SOURCE_DIR`, project config, then `../SHUD` relative to this
-repository.
+`AUTOSHUD_SHUD_SOURCE_DIR`, project config key `shud.source`, then `../SHUD`
+relative to this repository.
 
 For each accepted case Step4 runs `make clean` and then `make shud` in the
 local SHUD source directory. It stages the freshly built `shud` executable into
 the case run directory and runs `./shud 9035800` from that directory. The
 acceptance fails if the local source, build, solver run, or required output
 variables are unavailable.
+
+Before building, Step4 configures the case `cfg.para` copy so the Step5-required
+binary output variables are emitted. Acceptance may pass short-run `END` and
+`MAX_SOLVER_STEP` controls through the Step4 runner, but normal public runs keep
+the project simulation window unless explicitly overridden.
+
+Step5 writes summaries and figures only within its configured analysis
+directory. If `analysis_dir` is outside `output_dir`, callers must pass an
+explicit containing `output_root`.
 
 Generated artifacts are kept under `.autoshud-artifacts/step45/<timestamp>/`
 by default and are ignored by git. The Chinese report is written to:

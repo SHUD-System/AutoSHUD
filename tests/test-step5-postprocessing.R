@@ -92,4 +92,63 @@ test_that("Step5 validation accepts compatible finite outputs", {
               "unexpected validation timestep count")
 })
 
+test_that("Step5 rejects summary_file outside analysis_dir", {
+  tmp <- tempfile("step5-paths-")
+  output_dir <- file.path(tmp, "output")
+  analysis_dir <- file.path(output_dir, "SHUDtb")
+  expect_error(
+    autoshud_step5_resolve_output_paths(
+      output_dir = output_dir,
+      analysis_dir = analysis_dir,
+      summary_file = file.path(analysis_dir, "..", "escaped.csv")
+    ),
+    "summary_file must stay under analysis_dir"
+  )
+})
+
+test_that("Step5 rejects escaped plot filename", {
+  tmp <- tempfile("step5-plot-")
+  output_dir <- file.path(tmp, "output")
+  analysis_dir <- file.path(output_dir, "SHUDtb")
+  expect_error(
+    autoshud_step5_resolve_output_paths(
+      output_dir = output_dir,
+      analysis_dir = analysis_dir,
+      summary_file = file.path(analysis_dir, "summary.csv"),
+      plot_filename = "../WaterBalance.png"
+    ),
+    "plot filename"
+  )
+})
+
+test_that("Step5 rejects absolute plot filename", {
+  tmp <- tempfile("step5-plot-abs-")
+  output_dir <- file.path(tmp, "output")
+  analysis_dir <- file.path(output_dir, "SHUDtb")
+  expect_error(
+    autoshud_step5_resolve_output_paths(
+      output_dir = output_dir,
+      analysis_dir = analysis_dir,
+      summary_file = file.path(analysis_dir, "summary.csv"),
+      plot_filename = file.path(tmp, "WaterBalance.png")
+    ),
+    "plot filename"
+  )
+})
+
+test_that("Step5 accepts contained default output paths", {
+  tmp <- tempfile("step5-contained-")
+  output_dir <- file.path(tmp, "output")
+  analysis_dir <- file.path(output_dir, "SHUDtb")
+  paths <- autoshud_step5_resolve_output_paths(
+    output_dir = output_dir,
+    analysis_dir = analysis_dir,
+    summary_file = file.path(analysis_dir, "summary.csv")
+  )
+  expect_true(autoshud_step5_path_inside(paths$summary_file, paths$analysis_dir),
+              "summary path is not contained")
+  expect_true(autoshud_step5_path_inside(paths$figure_file, paths$analysis_dir),
+              "figure path is not contained")
+})
+
 message("PASS: Step5 post-processing failure tests")

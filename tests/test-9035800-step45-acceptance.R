@@ -297,14 +297,6 @@ tryCatch({
   }, logical(1))
   expect_true(all(staged_ok),
               "Failed to copy Step3 model inputs into Step4 run directory.")
-  autoshud_step4_configure_required_outputs(
-    model_input_dir = stage_dir,
-    prjname = "9035800",
-    end_day = as.numeric(Sys.getenv("AUTOSHUD_STEP45_END_DAY", "1")),
-    output_interval = 1440,
-    max_solver_step = as.numeric(Sys.getenv("AUTOSHUD_STEP45_MAX_SOLVER_STEP", "20"))
-  )
-
   gis_before <- if (dir.exists(file.path(stage_dir, "gis"))) {
     hash_tree(file.path(stage_dir, "gis"))
   } else {
@@ -320,6 +312,8 @@ tryCatch({
     build_timeout = as.numeric(Sys.getenv("AUTOSHUD_SHUD_BUILD_TIMEOUT", "600")),
     run_timeout = as.numeric(Sys.getenv("AUTOSHUD_SHUD_RUN_TIMEOUT", "1200")),
     threads = 1L,
+    step5_output_end_day = as.numeric(Sys.getenv("AUTOSHUD_STEP45_END_DAY", "1")),
+    step5_max_solver_step = as.numeric(Sys.getenv("AUTOSHUD_STEP45_MAX_SOLVER_STEP", "20")),
     stage_inputs = FALSE
   )
   expect_true(identical(step4_result$make_clean$exit_status, 0L),
@@ -345,6 +339,7 @@ tryCatch({
     model_input_dir = stage_dir,
     output_dir = step4_result$output_dir,
     analysis_dir = analysis_dir,
+    output_root = run_root,
     write_figures = TRUE
   )
   expect_file(step5_result$summary_file)

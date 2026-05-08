@@ -76,6 +76,9 @@
 
 ## 4. Documentation And Regression
 
+Verification evidence is supplied by the PR/workflow comments and local command
+output for each run; generated logs and reports are not committed.
+
 - [x] 4.1 Document Step4-5 acceptance commands, local SHUD source requirement,
   per-case `make clean && make shud` requirement, Chinese report location, and
   known non-goals.

@@ -118,6 +118,7 @@ read.prj <- function(fn.prj){
   local.forcing.max.bytes = getVAL(xcfg, 'local.forcing.max.bytes', TRUE)
   local.forcing.max.rows = getVAL(xcfg, 'local.forcing.max.rows', TRUE)
   local.forcing.max.cols = getVAL(xcfg, 'local.forcing.max.cols', TRUE)
+  shud.source = getVAL(xcfg, 'shud.source')
   
   if(!file.exists(fsp.wbd)){
     message('Error [critical]: fsp.wbds file is missing.')
@@ -285,6 +286,9 @@ read.prj <- function(fn.prj){
     )
   }else{
     
+  }
+  if(!is.null(shud.source) && nzchar(as.character(shud.source))){
+    cfg$shud <- list(source = as.character(shud.source))
   }
   
   return(cfg)
