@@ -52,6 +52,16 @@ expect_error <- function(expr, pattern) {
   expect_true(grepl(pattern, msg), "Error did not match ", pattern, ": ", msg)
   invisible(msg)
 }
+skip <- function(name, reason) {
+  message("SKIP: ", name, " - ", reason)
+}
+
+supports_symlink <- function(target, link) {
+  ok <- tryCatch(file.symlink(target, link),
+                 warning = function(w) FALSE,
+                 error = function(e) FALSE)
+  isTRUE(ok) && nzchar(Sys.readlink(link))
+}
 
 with_clean_source_resolution <- function(code) {
   old_option <- getOption("autoshud.shud_source")
@@ -92,6 +102,25 @@ make_fake_source <- function(root) {
     "  printf '1\\n' > \"$out/${prj}.${var}.dat\"",
     "done"
   ), file.path(source_dir, "fake-shud"), useBytes = TRUE)
+  Sys.chmod(file.path(source_dir, "fake-shud"), mode = "0755",
+            use_umask = FALSE)
+  normalizePath(source_dir, winslash = "/", mustWork = TRUE)
+}
+
+make_fake_source_with_solver <- function(root, solver_lines) {
+  source_dir <- file.path(root, "fake-shud")
+  dir.create(file.path(source_dir, "src"), recursive = TRUE, showWarnings = FALSE)
+  writeLines(c(
+    ".PHONY: clean shud",
+    "clean:",
+    "\t@echo clean",
+    "shud:",
+    "\t@echo shud",
+    "\t@cp fake-shud shud",
+    "\t@chmod +x shud"
+  ), file.path(source_dir, "Makefile"), useBytes = TRUE)
+  writeLines(solver_lines, file.path(source_dir, "fake-shud"),
+             useBytes = TRUE)
   Sys.chmod(file.path(source_dir, "fake-shud"), mode = "0755",
             use_umask = FALSE)
   normalizePath(source_dir, winslash = "/", mustWork = TRUE)
@@ -256,6 +285,238 @@ test_that("make shud failure preserves expected metadata", {
               "metadata did not record failed make shud.")
   expect_equal(metadata_value(metadata, "solver.exit_status"), "NA",
                "metadata did not retain unrun solver status.")
+})
+
+test_that("solver nonzero failure preserves expected metadata", {
+  tmp <- tempfile("step4-solver-fail-")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+  source_dir <- make_fake_source_with_solver(tmp, c(
+    "#!/bin/sh",
+    "echo solver failed >&2",
+    "exit 9"
+  ))
+  model_src <- make_model_input(file.path(tmp, "model-src"), "case1")
+  run_dir <- file.path(tmp, "run")
+  metadata <- file.path(run_dir, "autoshud-step4-logs", "case1",
+                        "step4-metadata.tsv")
+
+  expect_error(
+    autoshud_step4_run_case(
+      prjname = "case1",
+      model_input_dir = model_src,
+      run_dir = run_dir,
+      shud_source = source_dir,
+      build_timeout = 30,
+      run_timeout = 30,
+      stage_inputs = TRUE
+    ),
+    "SHUD solver execution failed"
+  )
+  expect_file(metadata)
+  expect_equal(metadata_value(metadata, "make_clean.exit_status"), "0",
+               "metadata did not record successful make clean.")
+  expect_equal(metadata_value(metadata, "make_shud.exit_status"), "0",
+               "metadata did not record successful make shud.")
+  expect_true(metadata_value(metadata, "solver.exit_status") != "0",
+              "metadata did not record failed solver.")
+})
+
+test_that("missing solver output failure preserves expected metadata", {
+  tmp <- tempfile("step4-output-missing-")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+  source_dir <- make_fake_source_with_solver(tmp, c(
+    "#!/bin/sh",
+    "set -eu",
+    "prj=\"$1\"",
+    "out=\"output/${prj}.out\"",
+    "mkdir -p \"$out\"",
+    "printf '1\\n' > \"$out/${prj}.eleysurf.dat\""
+  ))
+  model_src <- make_model_input(file.path(tmp, "model-src"), "case1")
+  run_dir <- file.path(tmp, "run")
+  metadata <- file.path(run_dir, "autoshud-step4-logs", "case1",
+                        "step4-metadata.tsv")
+
+  expect_error(
+    autoshud_step4_run_case(
+      prjname = "case1",
+      model_input_dir = model_src,
+      run_dir = run_dir,
+      shud_source = source_dir,
+      build_timeout = 30,
+      run_timeout = 30,
+      stage_inputs = TRUE
+    ),
+    "Required real SHUD solver output"
+  )
+  expect_file(metadata)
+  expect_equal(metadata_value(metadata, "make_clean.exit_status"), "0",
+               "metadata did not record successful make clean.")
+  expect_equal(metadata_value(metadata, "make_shud.exit_status"), "0",
+               "metadata did not record successful make shud.")
+  expect_equal(metadata_value(metadata, "solver.exit_status"), "0",
+               "metadata did not record successful solver.")
+})
+
+test_that("Step4 rejects symlinked staged input directory before unlink", {
+  tmp <- tempfile("step4-input-symlink-")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+  source_dir <- make_fake_source(tmp)
+  model_src <- make_model_input(file.path(tmp, "model-src"), "case1")
+  run_dir <- file.path(tmp, "run")
+  outside <- file.path(tmp, "outside")
+  dir.create(outside, recursive = TRUE, showWarnings = FALSE)
+  sentinel <- file.path(outside, "sentinel.txt")
+  writeLines("keep", sentinel, useBytes = TRUE)
+  dir.create(file.path(run_dir, "input"), recursive = TRUE, showWarnings = FALSE)
+  link <- file.path(run_dir, "input", "case1")
+  if (!supports_symlink(outside, link)) {
+    skip("Step4 rejects symlinked staged input directory before unlink",
+         "filesystem does not support file.symlink")
+  } else {
+    expect_error(
+      autoshud_step4_run_case(
+        prjname = "case1",
+        model_input_dir = model_src,
+        run_dir = run_dir,
+        shud_source = source_dir,
+        build_timeout = 30,
+        run_timeout = 30,
+        stage_inputs = TRUE
+      ),
+      "symlink"
+    )
+    expect_file(sentinel)
+    expect_true(autoshud_step4_is_symlink(link),
+                "staged input symlink was removed.")
+  }
+})
+
+test_that("Step4 rejects symlinked logs directory before writing logs", {
+  tmp <- tempfile("step4-logs-symlink-")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+  source_dir <- make_fake_source(tmp)
+  model_src <- make_model_input(file.path(tmp, "model-src"), "case1")
+  run_dir <- file.path(tmp, "run")
+  outside <- file.path(tmp, "outside-logs")
+  dir.create(outside, recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(run_dir, "autoshud-step4-logs"),
+             recursive = TRUE, showWarnings = FALSE)
+  link <- file.path(run_dir, "autoshud-step4-logs", "case1")
+  if (!supports_symlink(outside, link)) {
+    skip("Step4 rejects symlinked logs directory before writing logs",
+         "filesystem does not support file.symlink")
+  } else {
+    expect_error(
+      autoshud_step4_run_case(
+        prjname = "case1",
+        model_input_dir = model_src,
+        run_dir = run_dir,
+        shud_source = source_dir,
+        build_timeout = 30,
+        run_timeout = 30,
+        stage_inputs = TRUE
+      ),
+      "symlink"
+    )
+    expect_true(!file.exists(file.path(outside, "make-clean.stdout.log")),
+                "Step4 wrote logs through a symlinked logs_dir.")
+  }
+})
+
+test_that("Step4 rejects symlinked log file before writing logs", {
+  tmp <- tempfile("step4-log-file-symlink-")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+  source_dir <- make_fake_source(tmp)
+  model_src <- make_model_input(file.path(tmp, "model-src"), "case1")
+  run_dir <- file.path(tmp, "run")
+  outside <- file.path(tmp, "outside-log.txt")
+  writeLines("keep", outside, useBytes = TRUE)
+  logs_dir <- file.path(run_dir, "autoshud-step4-logs", "case1")
+  dir.create(logs_dir, recursive = TRUE, showWarnings = FALSE)
+  link <- file.path(logs_dir, "make-clean.stdout.log")
+  if (!supports_symlink(outside, link)) {
+    skip("Step4 rejects symlinked log file before writing logs",
+         "filesystem does not support file.symlink")
+  } else {
+    expect_error(
+      autoshud_step4_run_case(
+        prjname = "case1",
+        model_input_dir = model_src,
+        run_dir = run_dir,
+        shud_source = source_dir,
+        build_timeout = 30,
+        run_timeout = 30,
+        stage_inputs = TRUE
+      ),
+      "symlink"
+    )
+    expect_equal(readLines(outside, warn = FALSE), "keep",
+                 "Step4 wrote through a symlinked log file.")
+  }
+})
+
+test_that("Step4 rejects symlinked staged executable path before copy", {
+  tmp <- tempfile("step4-exe-symlink-")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+  source_dir <- make_fake_source(tmp)
+  model_src <- make_model_input(file.path(tmp, "model-src"), "case1")
+  run_dir <- file.path(tmp, "run")
+  outside <- file.path(tmp, "outside-shud")
+  writeLines("keep", outside, useBytes = TRUE)
+  dir.create(run_dir, recursive = TRUE, showWarnings = FALSE)
+  link <- file.path(run_dir, "shud")
+  if (!supports_symlink(outside, link)) {
+    skip("Step4 rejects symlinked staged executable path before copy",
+         "filesystem does not support file.symlink")
+  } else {
+    before <- readLines(outside, warn = FALSE)
+    expect_error(
+      autoshud_step4_run_case(
+        prjname = "case1",
+        model_input_dir = model_src,
+        run_dir = run_dir,
+        shud_source = source_dir,
+        build_timeout = 30,
+        run_timeout = 30,
+        stage_inputs = TRUE
+      ),
+      "symlink"
+    )
+    expect_equal(readLines(outside, warn = FALSE), before,
+                 "Step4 overwrote the executable symlink target.")
+  }
+})
+
+test_that("Step4 rejects symlinked output directory before output validation", {
+  tmp <- tempfile("step4-output-symlink-")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+  source_dir <- make_fake_source(tmp)
+  model_src <- make_model_input(file.path(tmp, "model-src"), "case1")
+  run_dir <- file.path(tmp, "run")
+  outside <- file.path(tmp, "outside-output")
+  dir.create(outside, recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(run_dir, "output"), recursive = TRUE, showWarnings = FALSE)
+  link <- file.path(run_dir, "output", "case1.out")
+  if (!supports_symlink(outside, link)) {
+    skip("Step4 rejects symlinked output directory before output validation",
+         "filesystem does not support file.symlink")
+  } else {
+    expect_error(
+      autoshud_step4_run_case(
+        prjname = "case1",
+        model_input_dir = model_src,
+        run_dir = run_dir,
+        shud_source = source_dir,
+        build_timeout = 30,
+        run_timeout = 30,
+        stage_inputs = TRUE
+      ),
+      "symlink"
+    )
+    expect_true(length(list.files(outside, all.files = TRUE, no.. = TRUE)) == 0L,
+                "Step4 wrote solver outputs through a symlinked output_dir.")
+  }
 })
 
 test_that("unsafe prjname fails before escaped staging side effects", {

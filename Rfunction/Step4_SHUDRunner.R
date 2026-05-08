@@ -84,6 +84,108 @@ autoshud_step4_path_inside <- function(path, root) {
   identical(path, root) || startsWith(path, paste0(root, "/"))
 }
 
+autoshud_step4_is_symlink <- function(path) {
+  link <- tryCatch(Sys.readlink(path),
+                   warning = function(e) rep("", length(path)),
+                   error = function(e) rep("", length(path)))
+  !is.na(link) & nzchar(link)
+}
+
+autoshud_step4_path_components <- function(path) {
+  path <- autoshud_step4_normalize_path(path)
+  components <- character()
+  current <- path
+  repeat {
+    components <- c(current, components)
+    parent <- dirname(current)
+    if (identical(parent, current)) break
+    current <- parent
+  }
+  unique(components)
+}
+
+autoshud_step4_existing_components <- function(path) {
+  components <- autoshud_step4_path_components(path)
+  exists <- file.exists(components) | dir.exists(components) |
+    autoshud_step4_is_symlink(components)
+  components[exists]
+}
+
+autoshud_step4_assert_safe_write_path <- function(path, root, label) {
+  path <- autoshud_step4_normalize_path(path)
+  root <- autoshud_step4_normalize_path(root)
+  autoshud_step4_assert_path_inside(path, root, label)
+  existing <- autoshud_step4_existing_components(path)
+  inside_root <- vapply(existing, autoshud_step4_path_inside, logical(1),
+                        root = root)
+  symlink <- existing[inside_root & autoshud_step4_is_symlink(existing)]
+  if (length(symlink)) {
+    stop(label, " must not contain symlinked existing path components: ",
+         paste(symlink, collapse = ", "), call. = FALSE)
+  }
+  if (dir.exists(root)) {
+    root_real <- normalizePath(root, winslash = "/", mustWork = TRUE)
+    resolved <- vapply(existing[inside_root], normalizePath, character(1),
+                       winslash = "/", mustWork = TRUE)
+    outside <- resolved[!vapply(resolved, autoshud_step4_path_inside, logical(1),
+                                root = root_real)]
+    if (length(outside)) {
+      stop(label, " resolved outside Step4 run_dir. path: ",
+           paste(outside, collapse = ", "), "; run_dir: ", root_real,
+           call. = FALSE)
+    }
+  }
+  invisible(path)
+}
+
+autoshud_step4_prepare_write_dir <- function(path, root, label,
+                                             create = TRUE) {
+  path <- autoshud_step4_assert_safe_write_path(path, root, label)
+  if ((file.exists(path) || autoshud_step4_is_symlink(path)) &&
+      !dir.exists(path)) {
+    stop(label, " must be a directory path: ", path, call. = FALSE)
+  }
+  if (isTRUE(create)) {
+    dir.create(path, recursive = TRUE, showWarnings = FALSE)
+    if (!dir.exists(path)) {
+      stop("Failed to create ", label, ": ", path, call. = FALSE)
+    }
+    autoshud_step4_assert_safe_write_path(path, root, label)
+  }
+  invisible(path)
+}
+
+autoshud_step4_prepare_write_file <- function(path, root, label,
+                                              create_parent = TRUE) {
+  path <- autoshud_step4_assert_safe_write_path(path, root, label)
+  if (isTRUE(create_parent)) {
+    autoshud_step4_prepare_write_dir(dirname(path), root,
+                                     paste0(label, " parent directory"),
+                                     create = TRUE)
+  }
+  autoshud_step4_assert_safe_write_path(path, root, label)
+  if (dir.exists(path)) {
+    stop(label, " must be a file path, not a directory: ", path,
+         call. = FALSE)
+  }
+  invisible(path)
+}
+
+autoshud_step4_safe_unlink <- function(path, root, label,
+                                       recursive = FALSE) {
+  path <- autoshud_step4_assert_safe_write_path(path, root, label)
+  if (!file.exists(path) && !dir.exists(path) &&
+      !autoshud_step4_is_symlink(path)) {
+    return(invisible(FALSE))
+  }
+  if (autoshud_step4_is_symlink(path)) {
+    stop(label, " must not be a symlink before unlink: ", path,
+         call. = FALSE)
+  }
+  unlink(path, recursive = recursive, force = TRUE)
+  invisible(TRUE)
+}
+
 autoshud_step4_assert_path_inside <- function(path, root, label) {
   if (!autoshud_step4_path_inside(path, root)) {
     stop(label, " must stay under Step4 run_dir. path: ",
@@ -188,8 +290,14 @@ autoshud_step4_command_env <- function(extra = NULL, threads = 1L) {
   paste0(names(base), "=", unname(base))
 }
 
-autoshud_step4_write_lines <- function(lines, file) {
-  dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+autoshud_step4_write_lines <- function(lines, file, root = NULL,
+                                       label = "Step4 output file") {
+  if (!is.null(root)) {
+    file <- autoshud_step4_prepare_write_file(file, root, label,
+                                              create_parent = TRUE)
+  } else {
+    dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+  }
   writeLines(as.character(lines), con = file, useBytes = TRUE)
   invisible(file)
 }
@@ -197,9 +305,20 @@ autoshud_step4_write_lines <- function(lines, file) {
 autoshud_step4_run_logged_command <- function(command, args = character(),
                                               wd, stdout, stderr,
                                               timeout = 600,
-                                              env = character()) {
-  dir.create(dirname(stdout), recursive = TRUE, showWarnings = FALSE)
-  dir.create(dirname(stderr), recursive = TRUE, showWarnings = FALSE)
+                                              env = character(),
+                                              write_root = NULL,
+                                              label = "Step4 command log") {
+  if (!is.null(write_root)) {
+    stdout <- autoshud_step4_prepare_write_file(
+      stdout, write_root, paste0(label, " stdout"), create_parent = TRUE
+    )
+    stderr <- autoshud_step4_prepare_write_file(
+      stderr, write_root, paste0(label, " stderr"), create_parent = TRUE
+    )
+  } else {
+    dir.create(dirname(stdout), recursive = TRUE, showWarnings = FALSE)
+    dir.create(dirname(stderr), recursive = TRUE, showWarnings = FALSE)
+  }
   start <- Sys.time()
   old_wd <- setwd(wd)
   on.exit(setwd(old_wd), add = TRUE)
@@ -318,13 +437,20 @@ autoshud_step4_write_config <- function(x, file) {
 autoshud_step4_configure_required_outputs <- function(model_input_dir, prjname,
                                                       end_day = 1,
                                                       output_interval = 1440,
-                                                      max_solver_step = NULL) {
+                                                      max_solver_step = NULL,
+                                                      write_root = model_input_dir) {
   prjname <- autoshud_step4_validate_prjname(prjname)
-  model_input_dir <- normalizePath(model_input_dir, winslash = "/",
-                                   mustWork = TRUE)
+  model_input_dir <- autoshud_step4_normalize_path(model_input_dir)
+  write_root <- autoshud_step4_normalize_path(write_root)
+  autoshud_step4_prepare_write_dir(model_input_dir, write_root,
+                                   "Step4 model input directory",
+                                   create = FALSE)
   cfg_file <- file.path(model_input_dir, paste0(prjname, ".cfg.para"))
   autoshud_step4_assert_path_inside(cfg_file, model_input_dir,
                                     "Step4 cfg.para path")
+  autoshud_step4_prepare_write_file(
+    cfg_file, write_root, "Step4 cfg.para path", create_parent = FALSE
+  )
   cfg <- autoshud_step4_read_config(cfg_file)
   required <- AUTOSHUD_STEP4_REQUIRED_OUTPUT_CONFIG
   required[] <- as.character(output_interval)
@@ -361,22 +487,37 @@ autoshud_step4_check_required_outputs <- function(output_dir, prjname,
 
 autoshud_step4_stage_inputs <- function(model_input_dir, run_dir, prjname) {
   prjname <- autoshud_step4_validate_prjname(prjname)
-  run_dir <- normalizePath(run_dir, winslash = "/", mustWork = FALSE)
-  expected <- normalizePath(file.path(run_dir, "input", prjname),
-                            winslash = "/", mustWork = FALSE)
+  run_dir <- autoshud_step4_normalize_path(run_dir)
+  autoshud_step4_prepare_write_dir(run_dir, run_dir, "Step4 run_dir",
+                                   create = TRUE)
+  expected <- autoshud_step4_normalize_path(file.path(run_dir, "input", prjname))
   autoshud_step4_assert_path_inside(expected, run_dir,
                                     "Step4 staged input directory")
+  autoshud_step4_prepare_write_dir(dirname(expected), run_dir,
+                                   "Step4 staged input parent directory",
+                                   create = TRUE)
+  autoshud_step4_assert_safe_write_path(
+    expected, run_dir, "Step4 staged input directory"
+  )
   actual <- normalizePath(model_input_dir, winslash = "/", mustWork = FALSE)
   if (identical(actual, expected)) {
     return(actual)
   }
-  dir.create(dirname(expected), recursive = TRUE, showWarnings = FALSE)
   if (dir.exists(expected)) {
-    unlink(expected, recursive = TRUE, force = TRUE)
+    autoshud_step4_safe_unlink(expected, run_dir,
+                               "Step4 staged input directory",
+                               recursive = TRUE)
   }
   dir.create(expected, recursive = TRUE, showWarnings = FALSE)
+  autoshud_step4_prepare_write_dir(expected, run_dir,
+                                   "Step4 staged input directory",
+                                   create = FALSE)
   files <- list.files(actual, all.files = TRUE, no.. = TRUE, full.names = TRUE)
   ok <- vapply(files, function(path) {
+    autoshud_step4_prepare_write_file(
+      file.path(expected, basename(path)), run_dir,
+      "Step4 staged input file", create_parent = FALSE
+    )
     file.copy(path, expected, recursive = TRUE, copy.date = TRUE,
               overwrite = TRUE)
   }, logical(1))
@@ -397,7 +538,7 @@ autoshud_step4_executable_info <- function(path) {
   )
 }
 
-autoshud_step4_write_metadata <- function(result, file) {
+autoshud_step4_write_metadata <- function(result, file, root = NULL) {
   env_lines <- paste0("env.", names(result$environment), "\t",
                       unname(result$environment))
   git_status <- result$shud_source_git$status %||% NA_character_
@@ -425,7 +566,8 @@ autoshud_step4_write_metadata <- function(result, file) {
     autoshud_step4_command_to_lines(result$solver, "solver"),
     paste0("required_outputs\t", paste(names(result$required_outputs), collapse = ","))
   )
-  autoshud_step4_write_lines(lines, file)
+  autoshud_step4_write_lines(lines, file, root = root,
+                             label = "Step4 metadata file")
 }
 
 autoshud_step4_run_case <- function(prjname,
@@ -449,25 +591,31 @@ autoshud_step4_run_case <- function(prjname,
   source_dir <- autoshud_step4_resolve_shud_source(
     shud_source = shud_source, xfg = xfg, repo_root = repo_root
   )
-  model_input_dir <- normalizePath(model_input_dir, winslash = "/",
-                                   mustWork = TRUE)
-  autoshud_step4_check_required_inputs(model_input_dir, prjname)
+  requested_model_input_dir <- autoshud_step4_normalize_path(model_input_dir)
 
-  run_dir <- normalizePath(run_dir, winslash = "/", mustWork = FALSE)
-  dir.create(run_dir, recursive = TRUE, showWarnings = FALSE)
-  expected_input <- normalizePath(file.path(run_dir, "input", prjname),
-                                  winslash = "/", mustWork = FALSE)
+  run_dir <- autoshud_step4_normalize_path(run_dir)
+  autoshud_step4_prepare_write_dir(run_dir, run_dir, "Step4 run_dir",
+                                   create = TRUE)
+  expected_input <- autoshud_step4_normalize_path(
+    file.path(run_dir, "input", prjname)
+  )
   autoshud_step4_assert_path_inside(expected_input, run_dir,
                                     "Step4 model input directory")
   if (isTRUE(stage_inputs)) {
+    model_input_dir <- normalizePath(requested_model_input_dir, winslash = "/",
+                                     mustWork = TRUE)
+    autoshud_step4_check_required_inputs(model_input_dir, prjname)
     model_input_dir <- autoshud_step4_stage_inputs(model_input_dir, run_dir, prjname)
   } else {
-    if (!identical(normalizePath(model_input_dir, winslash = "/", mustWork = FALSE),
-                   expected_input)) {
+    if (!identical(requested_model_input_dir, expected_input)) {
       stop("Step4 run_dir must contain the selected model input at input/",
            prjname, " or stage_inputs must be TRUE. run_dir: ", run_dir,
-           "; model_input_dir: ", model_input_dir, call. = FALSE)
+           "; model_input_dir: ", requested_model_input_dir, call. = FALSE)
     }
+    model_input_dir <- autoshud_step4_prepare_write_dir(
+      expected_input, run_dir, "Step4 model input directory", create = FALSE
+    )
+    autoshud_step4_check_required_inputs(model_input_dir, prjname)
   }
   if (isTRUE(configure_step5_outputs)) {
     autoshud_step4_configure_required_outputs(
@@ -475,21 +623,31 @@ autoshud_step4_run_case <- function(prjname,
       prjname = prjname,
       end_day = step5_output_end_day,
       output_interval = step5_output_interval,
-      max_solver_step = step5_max_solver_step
+      max_solver_step = step5_max_solver_step,
+      write_root = run_dir
     )
   }
 
   logs_dir <- logs_dir %||% file.path(run_dir, "autoshud-step4-logs", prjname)
-  logs_dir <- normalizePath(logs_dir, winslash = "/", mustWork = FALSE)
+  logs_dir <- autoshud_step4_normalize_path(logs_dir)
   autoshud_step4_assert_path_inside(logs_dir, run_dir, "Step4 logs_dir")
-  dir.create(logs_dir, recursive = TRUE, showWarnings = FALSE)
-  output_dir <- normalizePath(file.path(run_dir, "output", paste0(prjname, ".out")),
-                              winslash = "/", mustWork = FALSE)
+  autoshud_step4_prepare_write_dir(logs_dir, run_dir, "Step4 logs_dir",
+                                   create = TRUE)
+  output_dir <- autoshud_step4_normalize_path(
+    file.path(run_dir, "output", paste0(prjname, ".out"))
+  )
   autoshud_step4_assert_path_inside(output_dir, run_dir, "Step4 output_dir")
-  staged_exe <- normalizePath(file.path(run_dir, "shud"), winslash = "/",
-                              mustWork = FALSE)
+  autoshud_step4_prepare_write_dir(dirname(output_dir), run_dir,
+                                   "Step4 output parent directory",
+                                   create = TRUE)
+  autoshud_step4_assert_safe_write_path(output_dir, run_dir,
+                                        "Step4 output_dir")
+  staged_exe <- autoshud_step4_normalize_path(file.path(run_dir, "shud"))
   autoshud_step4_assert_path_inside(staged_exe, run_dir,
                                     "Step4 staged executable")
+  autoshud_step4_prepare_write_file(staged_exe, run_dir,
+                                    "Step4 staged executable",
+                                    create_parent = FALSE)
   make_clean_stdout <- file.path(logs_dir, "make-clean.stdout.log")
   make_clean_stderr <- file.path(logs_dir, "make-clean.stderr.log")
   make_shud_stdout <- file.path(logs_dir, "make-shud.stdout.log")
@@ -512,7 +670,8 @@ autoshud_step4_run_case <- function(prjname,
     "make", "clean", wd = source_dir,
     stdout = make_clean_stdout,
     stderr = make_clean_stderr,
-    timeout = build_timeout, env = env
+    timeout = build_timeout, env = env,
+    write_root = run_dir, label = "Step4 make clean log"
   )
   if (!identical(make_clean$exit_status, 0L)) {
     result <- list(
@@ -526,7 +685,9 @@ autoshud_step4_run_case <- function(prjname,
       executable = autoshud_step4_executable_info(staged_exe),
       required_outputs = character()
     )
-    autoshud_step4_write_metadata(result, file.path(logs_dir, "step4-metadata.tsv"))
+    autoshud_step4_write_metadata(
+      result, file.path(logs_dir, "step4-metadata.tsv"), root = run_dir
+    )
     stop("make clean failed for SHUD source. See log: ",
          make_clean$stderr, call. = FALSE)
   }
@@ -535,7 +696,8 @@ autoshud_step4_run_case <- function(prjname,
     "make", "shud", wd = source_dir,
     stdout = make_shud_stdout,
     stderr = make_shud_stderr,
-    timeout = build_timeout, env = env
+    timeout = build_timeout, env = env,
+    write_root = run_dir, label = "Step4 make shud log"
   )
   if (!identical(make_shud$exit_status, 0L)) {
     result <- list(
@@ -548,7 +710,9 @@ autoshud_step4_run_case <- function(prjname,
       executable = autoshud_step4_executable_info(staged_exe),
       required_outputs = character()
     )
-    autoshud_step4_write_metadata(result, file.path(logs_dir, "step4-metadata.tsv"))
+    autoshud_step4_write_metadata(
+      result, file.path(logs_dir, "step4-metadata.tsv"), root = run_dir
+    )
     stop("make shud failed for SHUD source. See log: ",
          make_shud$stderr, call. = FALSE)
   }
@@ -558,6 +722,9 @@ autoshud_step4_run_case <- function(prjname,
     stop("make shud completed but did not produce a non-empty executable: ",
          built_exe, call. = FALSE)
   }
+  autoshud_step4_prepare_write_file(staged_exe, run_dir,
+                                    "Step4 staged executable",
+                                    create_parent = FALSE)
   if (!file.copy(built_exe, staged_exe, overwrite = TRUE, copy.date = TRUE)) {
     stop("Failed to stage freshly built shud executable into run directory: ",
          staged_exe, call. = FALSE)
@@ -568,7 +735,8 @@ autoshud_step4_run_case <- function(prjname,
     "./shud", prjname, wd = run_dir,
     stdout = solver_stdout,
     stderr = solver_stderr,
-    timeout = run_timeout, env = env
+    timeout = run_timeout, env = env,
+    write_root = run_dir, label = "Step4 solver log"
   )
   if (!identical(solver$exit_status, 0L)) {
     result <- list(
@@ -579,13 +747,35 @@ autoshud_step4_run_case <- function(prjname,
       executable = autoshud_step4_executable_info(staged_exe),
       required_outputs = character()
     )
-    autoshud_step4_write_metadata(result, file.path(logs_dir, "step4-metadata.tsv"))
+    autoshud_step4_write_metadata(
+      result, file.path(logs_dir, "step4-metadata.tsv"), root = run_dir
+    )
     stop("SHUD solver execution failed. See log: ",
          solver$stderr, call. = FALSE)
   }
 
-  outputs <- autoshud_step4_check_required_outputs(output_dir, prjname,
-                                                   required_outputs)
+  autoshud_step4_prepare_write_dir(output_dir, run_dir, "Step4 output_dir",
+                                   create = FALSE)
+  outputs <- tryCatch(
+    autoshud_step4_check_required_outputs(output_dir, prjname,
+                                          required_outputs),
+    error = function(e) e
+  )
+  if (inherits(outputs, "error")) {
+    result <- list(
+      prjname = prjname, shud_source = source_dir, shud_source_git = git_info,
+      run_dir = run_dir,
+      model_input_dir = model_input_dir,
+      output_dir = output_dir, logs_dir = logs_dir, environment = env_named,
+      make_clean = make_clean, make_shud = make_shud, solver = solver,
+      executable = autoshud_step4_executable_info(staged_exe),
+      required_outputs = character()
+    )
+    autoshud_step4_write_metadata(
+      result, file.path(logs_dir, "step4-metadata.tsv"), root = run_dir
+    )
+    stop(conditionMessage(outputs), call. = FALSE)
+  }
   result <- list(
     prjname = prjname,
     shud_source = source_dir,
@@ -601,6 +791,8 @@ autoshud_step4_run_case <- function(prjname,
     executable = autoshud_step4_executable_info(staged_exe),
     required_outputs = outputs
   )
-  autoshud_step4_write_metadata(result, file.path(logs_dir, "step4-metadata.tsv"))
+  autoshud_step4_write_metadata(
+    result, file.path(logs_dir, "step4-metadata.tsv"), root = run_dir
+  )
   result
 }

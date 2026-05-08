@@ -77,6 +77,96 @@ autoshud_step5_path_inside <- function(path, root) {
   identical(path, root) || startsWith(path, paste0(root, "/"))
 }
 
+autoshud_step5_is_symlink <- function(path) {
+  link <- tryCatch(Sys.readlink(path),
+                   warning = function(e) rep("", length(path)),
+                   error = function(e) rep("", length(path)))
+  !is.na(link) & nzchar(link)
+}
+
+autoshud_step5_path_components <- function(path) {
+  path <- autoshud_step5_normalize_path(path)
+  components <- character()
+  current <- path
+  repeat {
+    components <- c(current, components)
+    parent <- dirname(current)
+    if (identical(parent, current)) break
+    current <- parent
+  }
+  unique(components)
+}
+
+autoshud_step5_existing_components <- function(path) {
+  components <- autoshud_step5_path_components(path)
+  exists <- file.exists(components) | dir.exists(components) |
+    autoshud_step5_is_symlink(components)
+  components[exists]
+}
+
+autoshud_step5_assert_safe_path <- function(path, root, label) {
+  path <- autoshud_step5_normalize_path(path)
+  root <- autoshud_step5_normalize_path(root)
+  if (!autoshud_step5_path_inside(path, root)) {
+    stop(label, " must stay under the configured Step5 output root. path: ",
+         path, "; output_root: ", root, call. = FALSE)
+  }
+  existing <- autoshud_step5_existing_components(path)
+  inside_root <- vapply(existing, autoshud_step5_path_inside, logical(1),
+                        root = root)
+  symlink <- existing[inside_root & autoshud_step5_is_symlink(existing)]
+  if (length(symlink)) {
+    stop(label, " must not contain symlinked existing path components: ",
+         paste(symlink, collapse = ", "), call. = FALSE)
+  }
+  if (dir.exists(root)) {
+    root_real <- normalizePath(root, winslash = "/", mustWork = TRUE)
+    resolved <- vapply(existing[inside_root], normalizePath, character(1),
+                       winslash = "/", mustWork = TRUE)
+    outside <- resolved[!vapply(resolved, autoshud_step5_path_inside, logical(1),
+                                root = root_real)]
+    if (length(outside)) {
+      stop(label, " resolved outside Step5 output root. path: ",
+           paste(outside, collapse = ", "), "; output_root: ", root_real,
+           call. = FALSE)
+    }
+  }
+  invisible(path)
+}
+
+autoshud_step5_prepare_write_dir <- function(path, root, label,
+                                             create = TRUE) {
+  path <- autoshud_step5_assert_safe_path(path, root, label)
+  if ((file.exists(path) || autoshud_step5_is_symlink(path)) &&
+      !dir.exists(path)) {
+    stop(label, " must be a directory path: ", path, call. = FALSE)
+  }
+  if (isTRUE(create)) {
+    dir.create(path, recursive = TRUE, showWarnings = FALSE)
+    if (!dir.exists(path)) {
+      stop("Failed to create ", label, ": ", path, call. = FALSE)
+    }
+    autoshud_step5_assert_safe_path(path, root, label)
+  }
+  invisible(path)
+}
+
+autoshud_step5_prepare_write_file <- function(path, root, label,
+                                              create_parent = TRUE) {
+  path <- autoshud_step5_assert_safe_path(path, root, label)
+  if (isTRUE(create_parent)) {
+    autoshud_step5_prepare_write_dir(dirname(path), root,
+                                     paste0(label, " parent directory"),
+                                     create = TRUE)
+  }
+  autoshud_step5_assert_safe_path(path, root, label)
+  if (dir.exists(path)) {
+    stop(label, " must be a file path, not a directory: ", path,
+         call. = FALSE)
+  }
+  invisible(path)
+}
+
 autoshud_step5_validate_plot_filename <- function(filename) {
   if (!is.character(filename) || length(filename) != 1L ||
       is.na(filename) || !nzchar(filename) ||
@@ -118,6 +208,21 @@ autoshud_step5_resolve_output_paths <- function(output_dir, analysis_dir,
     stop("Step5 figure path must stay under analysis_dir. figure: ",
          figure_file, "; analysis_dir: ", analysis_dir, call. = FALSE)
   }
+  output_root <- autoshud_step5_assert_safe_path(
+    output_root, output_root, "Step5 output_root"
+  )
+  output_dir <- autoshud_step5_assert_safe_path(
+    output_dir, output_root, "Step5 output_dir"
+  )
+  analysis_dir <- autoshud_step5_assert_safe_path(
+    analysis_dir, output_root, "Step5 analysis_dir"
+  )
+  summary_file <- autoshud_step5_prepare_write_file(
+    summary_file, output_root, "Step5 summary_file", create_parent = FALSE
+  )
+  figure_file <- autoshud_step5_prepare_write_file(
+    figure_file, output_root, "Step5 figure file", create_parent = FALSE
+  )
   list(output_root = output_root, output_dir = output_dir,
        analysis_dir = analysis_dir, summary_file = summary_file,
        plot_filename = plot_filename, figure_file = figure_file)
@@ -334,8 +439,14 @@ autoshud_step5_compute_summary <- function(xl, mesh, river, ic, att,
   as.data.frame(as.list(summary), stringsAsFactors = FALSE)
 }
 
-autoshud_step5_write_summary <- function(summary, file) {
-  dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+autoshud_step5_write_summary <- function(summary, file, output_root = NULL) {
+  if (!is.null(output_root)) {
+    file <- autoshud_step5_prepare_write_file(
+      file, output_root, "Step5 summary_file", create_parent = TRUE
+    )
+  } else {
+    dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+  }
   utils::write.csv(summary, file = file, row.names = FALSE, quote = TRUE)
   if (!file.exists(file) || file.info(file)$size <= 0) {
     stop("Step5 summary file was not written or is empty: ", file,
@@ -345,7 +456,8 @@ autoshud_step5_write_summary <- function(summary, file) {
 }
 
 autoshud_step5_write_water_balance_plot <- function(summary, analysis_dir,
-                                                    filename = "WaterBalance.png") {
+                                                    filename = "WaterBalance.png",
+                                                    output_root = analysis_dir) {
   filename <- autoshud_step5_validate_plot_filename(filename)
   analysis_dir <- autoshud_step5_normalize_path(analysis_dir)
   file <- autoshud_step5_normalize_path(file.path(analysis_dir, filename))
@@ -353,7 +465,11 @@ autoshud_step5_write_water_balance_plot <- function(summary, analysis_dir,
     stop("Step5 figure path must stay under analysis_dir. figure: ",
          file, "; analysis_dir: ", analysis_dir, call. = FALSE)
   }
-  dir.create(analysis_dir, recursive = TRUE, showWarnings = FALSE)
+  autoshud_step5_prepare_write_dir(analysis_dir, output_root,
+                                   "Step5 analysis_dir", create = TRUE)
+  file <- autoshud_step5_prepare_write_file(
+    file, output_root, "Step5 figure file", create_parent = FALSE
+  )
   png(filename = file, height = 7, width = 9, res = 150, units = "in")
   on.exit(dev.off(), add = TRUE)
   values <- as.numeric(summary[1, c(
@@ -397,11 +513,13 @@ autoshud_step5_run <- function(prjname, model_input_dir, output_dir,
     xl = xl, mesh = mesh, river = river, ic = ic,
     att = att, geol = geol, cfg.para = cfg.para
   )
-  autoshud_step5_write_summary(summary, paths$summary_file)
+  autoshud_step5_write_summary(summary, paths$summary_file,
+                               output_root = paths$output_root)
   figures <- character()
   if (isTRUE(write_figures)) {
     figures <- autoshud_step5_write_water_balance_plot(
-      summary, paths$analysis_dir, filename = paths$plot_filename
+      summary, paths$analysis_dir, filename = paths$plot_filename,
+      output_root = paths$output_root
     )
     if (!all(file.exists(figures)) || any(file.info(figures)$size <= 0)) {
       stop("Step5 figure output is missing or empty.", call. = FALSE)
