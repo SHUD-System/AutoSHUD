@@ -38,6 +38,9 @@ Thumbs.db
 # --- HTTP 缓存（如下载数据用 httr）---
 .httr-oauth
 
+# --- AutoSHUD local acceptance artifacts ---
+.autoshud-artifacts/
+
 # --- macOS 复制产生的重复文件（如 `foo 2.R`）---
 * 2.R
 * 2.r

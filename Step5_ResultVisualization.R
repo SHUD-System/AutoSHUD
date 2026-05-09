@@ -8,26 +8,21 @@
 # 7.
 # 8.
 source('GetReady.R')
+source('Rfunction/Step5_PostProcessing.R')
 
-pp = shud.env(prjname = xfg$prjname, inpath = xfg$dir$modelin, outpath = xfg$dir$modelout)
-ia=getArea(); AA = sum(ia)
-res=round(sqrt(mean(ia)), -2)
-rmask=shud.mask(cellsize = res)
-spr=read_river_sp()
-pr=read_river()
-oid=get_river_outlets(pr@river$Down)
-vns= c("eleysurf","eleyunsat","eleygw",
-       "elevprcp","elevetp",
-       "elevinfil","elevrech",
-       # "eleqsurf", "eleqsub",
-       "elevetic", "elevettr", "elevetev",'elevetp',
-       "rivqdown","rivqsub", "rivqsurf","rivystage")
-# undebug(BasicPlot)
-xl=loaddata(varname = vns)
-stop()
-png(filename = file.path(pp$anapath, 'WaterBalance.png'), height = 7, width = 7, res = 300, units = 'in')
-wb=wb.all(xl=xl, apply.weekly, plot = T)
-dev.off()
+result <- autoshud_step5_run(
+  prjname = xfg$prjname,
+  model_input_dir = xfg$dir$modelin,
+  output_dir = xfg$dir$modelout,
+  analysis_dir = file.path(xfg$dir$modelout, 'SHUDtb'),
+  write_figures = TRUE
+)
+
+message('Step5 result visualization smoke check completed.')
+message('Summary file: ', result$summary_file)
+if (length(result$figures)) {
+  message('Figure file(s): ', paste(result$figures, collapse = ', '))
+}
 
 # gw.mon =apply.monthly(
 #   xl$eleygw, mean)
