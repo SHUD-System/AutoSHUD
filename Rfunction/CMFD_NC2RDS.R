@@ -41,8 +41,8 @@ for (iyr in 1:nyr) {
     vn = varnames[ivn]
     message('\t', ivn, '/', nv, '\t', vn)
     path = file.path(xfg$dir.ldas, vn)
-    fns = list.files(path, pattern = glob2rx(paste0(tolower(vn), '_CMFD_*', yr, '*.nc')), full.names = F)
-    ffns = list.files(path, pattern = glob2rx(paste0(tolower(vn), '_CMFD_*', yr, '*.nc')), full.names = T)
+    fns = list.files(path, pattern = glob2rx(paste0(tolower(vn), '_CMFD_*_', yr, '??.nc')), full.names = F)
+    ffns = list.files(path, pattern = glob2rx(paste0(tolower(vn), '_CMFD_*_', yr, '??.nc')), full.names = T)
     nf = length(fns)
     pnt = 0;
     for(i in 1:nf){ # vn in the whole year
